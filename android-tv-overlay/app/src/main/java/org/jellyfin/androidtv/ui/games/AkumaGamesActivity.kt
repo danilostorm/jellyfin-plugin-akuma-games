@@ -193,7 +193,7 @@ class AkumaGamesActivity : AppCompatActivity() {
 		runOnUiThread {
 			if (!isFinishing && !isDestroyed) {
 				webView.evaluateJavascript(
-					"window.AkumaTv && window.AkumaTv.$functionName(atob('$encoded'));",
+					"window.AkumaTv && window.AkumaTv.$functionName(decodeURIComponent(escape(atob('$encoded'))));",
 					null,
 				)
 			}
@@ -206,7 +206,7 @@ class AkumaGamesActivity : AppCompatActivity() {
 		runOnUiThread {
 			if (!isFinishing && !isDestroyed) {
 				webView.evaluateJavascript(
-					"window.AkumaTv && window.AkumaTv.receiveError(atob('$encoded'));",
+					"window.AkumaTv && window.AkumaTv.receiveError(decodeURIComponent(escape(atob('$encoded'))));",
 					null,
 				)
 			}
