@@ -12,9 +12,9 @@ public sealed class SyncGamesTask : IScheduledTask
         _syncService = syncService;
     }
 
-    public string Name => "Sincronizar biblioteca de games";
+    public string Name => "Sincronizar catálogo de games";
     public string Key => "AkumaGamesSync";
-    public string Description => "Atualiza a biblioteca nativa Games usando a API Akumanimes.";
+    public string Description => "Atualiza o catálogo Akuma Games sem criar arquivos de vídeo ou acionar o player do Jellyfin.";
     public string Category => "Akuma Games";
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)

@@ -18,21 +18,34 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     public override string Name => "Akuma Games";
-    public override string Description => "Sincroniza o catálogo Akumanimes como uma biblioteca nativa do Jellyfin.";
+    public override string Description => "Sincroniza o catálogo Akumanimes e abre os games em uma página própria, sem usar o player de vídeo.";
     public override Guid Id => PluginId;
     public static Plugin? Instance { get; private set; }
 
     public IEnumerable<PluginPageInfo> GetPages()
     {
+        string pluginNamespace = GetType().Namespace ?? "Jellyfin.Plugin.AkumaGames";
         return
         [
             new PluginPageInfo
             {
                 Name = Name,
+                DisplayName = Name,
                 EmbeddedResourcePath = string.Format(
                     CultureInfo.InvariantCulture,
                     "{0}.Configuration.configPage.html",
-                    GetType().Namespace)
+                    pluginNamespace)
+            },
+            new PluginPageInfo
+            {
+                Name = "akumagames",
+                DisplayName = "Games",
+                EmbeddedResourcePath = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}.Pages.catalogPage.html",
+                    pluginNamespace),
+                EnableInMainMenu = true,
+                MenuIcon = "sports_esports"
             }
         ];
     }

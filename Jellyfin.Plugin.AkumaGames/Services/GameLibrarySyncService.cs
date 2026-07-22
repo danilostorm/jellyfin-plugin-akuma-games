@@ -1,19 +1,26 @@
 using System.Text;
-using System.Xml.Linq;
+using System.Text.Json;
 using Jellyfin.Plugin.AkumaGames.Models;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.AkumaGames.Services;
 
+/// <summary>
+/// Sincroniza os dados do catálogo sem criar mídias reproduzíveis pelo Jellyfin.
+/// </summary>
 public sealed class GameLibrarySyncService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
+
     private readonly IApplicationPaths _applicationPaths;
     private readonly ILibraryManager _libraryManager;
     private readonly AkumaGamesClient _client;
+    private readonly GameCatalogStore _catalogStore;
     private readonly ILogger<GameLibrarySyncService> _logger;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
 
@@ -21,11 +28,13 @@ public sealed class GameLibrarySyncService
         IApplicationPaths applicationPaths,
         ILibraryManager libraryManager,
         AkumaGamesClient client,
+        GameCatalogStore catalogStore,
         ILogger<GameLibrarySyncService> logger)
     {
         _applicationPaths = applicationPaths;
         _libraryManager = libraryManager;
         _client = client;
+        _catalogStore = catalogStore;
         _logger = logger;
     }
 
@@ -38,7 +47,9 @@ public sealed class GameLibrarySyncService
         {
             Directory.CreateDirectory(LibraryPath);
             IReadOnlyList<AkumaGame> games = await _client.GetAllGamesAsync(cancellationToken).ConfigureAwait(false);
+            await _catalogStore.SaveAsync(games, cancellationToken).ConfigureAwait(false);
             progress?.Report(5);
+
             var activeDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int completed = 0;
 
@@ -50,9 +61,14 @@ public sealed class GameLibrarySyncService
                 Directory.CreateDirectory(gamePath);
                 activeDirectories.Add(Path.GetFullPath(gamePath));
 
-                await WriteTextIfChangedAsync(Path.Combine(gamePath, "game.strm"), game.PlayerUrl, cancellationToken).ConfigureAwait(false);
-                await WriteTextIfChangedAsync(Path.Combine(gamePath, "game.nfo"), BuildNfo(game), cancellationToken).ConfigureAwait(false);
-                await WriteTextIfChangedAsync(Path.Combine(gamePath, ".akuma-game"), game.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
+                DeleteLegacyVideoFiles(gamePath);
+
+                string metadata = JsonSerializer.Serialize(game, JsonOptions);
+                await WriteTextIfChangedAsync(Path.Combine(gamePath, "game.json"), metadata, cancellationToken).ConfigureAwait(false);
+                await WriteTextIfChangedAsync(
+                    Path.Combine(gamePath, ".akuma-game"),
+                    game.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    cancellationToken).ConfigureAwait(false);
 
                 if (Plugin.Instance?.Configuration.DownloadImages == true && !string.IsNullOrWhiteSpace(game.ImageUrl))
                 {
@@ -71,7 +87,7 @@ public sealed class GameLibrarySyncService
                 }
 
                 completed++;
-                progress?.Report(5 + (completed * 85.0 / Math.Max(1, games.Count)));
+                progress?.Report(5 + (completed * 90.0 / Math.Max(1, games.Count)));
             }
 
             if (Plugin.Instance?.Configuration.RemoveMissingGames == true)
@@ -79,14 +95,13 @@ public sealed class GameLibrarySyncService
                 RemoveMissingDirectories(activeDirectories);
             }
 
-            if (Plugin.Instance?.Configuration.AutoCreateLibrary == true)
-            {
-                await EnsureNativeLibraryAsync(cancellationToken).ConfigureAwait(false);
-            }
-
+            // Solicita uma varredura para que itens .strm antigos desapareçam da biblioteca legada.
+            // A v0.2 usa uma página própria e não envia mais os games ao player de vídeo.
             _libraryManager.QueueLibraryScan();
             progress?.Report(100);
-            _logger.LogInformation("Akuma Games: sincronização concluída com {Count} games em {Path}.", games.Count, LibraryPath);
+            _logger.LogInformation(
+                "Akuma Games: catálogo sincronizado com {Count} games. Nenhum item de vídeo foi criado.",
+                games.Count);
             return games.Count;
         }
         finally
@@ -95,28 +110,29 @@ public sealed class GameLibrarySyncService
         }
     }
 
-    private async Task EnsureNativeLibraryAsync(CancellationToken cancellationToken)
+    private static void DeleteLegacyVideoFiles(string gamePath)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        string libraryName = Plugin.Instance?.Configuration.LibraryName?.Trim() ?? "Games";
-        if (string.IsNullOrWhiteSpace(libraryName)) libraryName = "Games";
+        DeleteIfExists(Path.Combine(gamePath, "game.strm"));
+        DeleteIfExists(Path.Combine(gamePath, "game.nfo"));
+    }
 
-        bool exists = _libraryManager.GetVirtualFolders(true)
-            .Any(folder => string.Equals(folder.Name, libraryName, StringComparison.OrdinalIgnoreCase));
-        if (exists) return;
-
-        var options = new LibraryOptions
+    private static void DeleteIfExists(string path)
+    {
+        try
         {
-            PathInfos = [new MediaPathInfo(LibraryPath)],
-            EnableRealtimeMonitor = false,
-            EnablePhotos = false,
-            SaveLocalMetadata = true,
-            PreferredMetadataLanguage = "pt-BR",
-            MetadataCountryCode = "BR"
-        };
-
-        await _libraryManager.AddVirtualFolder(libraryName, CollectionTypeOptions.homevideos, options, false).ConfigureAwait(false);
-        _logger.LogInformation("Akuma Games: biblioteca nativa {LibraryName} criada em {Path}.", libraryName, LibraryPath);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            // A próxima sincronização tentará novamente.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // A próxima sincronização tentará novamente.
+        }
     }
 
     private void RemoveMissingDirectories(HashSet<string> activeDirectories)
@@ -124,7 +140,11 @@ public sealed class GameLibrarySyncService
         foreach (string marker in Directory.EnumerateFiles(LibraryPath, ".akuma-game", SearchOption.AllDirectories))
         {
             string? directory = Path.GetDirectoryName(marker);
-            if (directory is null || activeDirectories.Contains(Path.GetFullPath(directory))) continue;
+            if (directory is null || activeDirectories.Contains(Path.GetFullPath(directory)))
+            {
+                continue;
+            }
+
             try
             {
                 Directory.Delete(directory, true);
@@ -136,34 +156,14 @@ public sealed class GameLibrarySyncService
         }
     }
 
-    private static string BuildNfo(AkumaGame game)
-    {
-        var movie = new XElement(
-            "movie",
-            new XElement("title", game.Title),
-            new XElement("sorttitle", game.Title),
-            new XElement("plot", game.Description),
-            new XElement("studio", game.System),
-            new XElement("genre", string.IsNullOrWhiteSpace(game.Genre) ? "Games" : game.Genre),
-            new XElement("tag", "Akuma Games"),
-            new XElement("tag", game.System),
-            new XElement("uniqueid", new XAttribute("type", "akumagames"), new XAttribute("default", "true"), game.Id),
-            new XElement("website", game.PlayerUrl));
-
-        if (!string.IsNullOrWhiteSpace(game.Players)) movie.Add(new XElement("tag", $"Jogadores: {game.Players}"));
-        if (game.PlayCount > 0) movie.Add(new XElement("tag", $"Jogadas: {game.PlayCount}"));
-        if (game.CreatedAt.HasValue)
-        {
-            movie.Add(new XElement("dateadded", game.CreatedAt.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
-        }
-
-        return new XDocument(new XDeclaration("1.0", "utf-8", null), movie).ToString();
-    }
-
     private static string SafeSegment(string value)
     {
         string cleaned = string.Join("_", value.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)).Trim();
-        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "Sem nome";
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            cleaned = "Sem nome";
+        }
+
         return cleaned.Length <= 120 ? cleaned : cleaned[..120].Trim();
     }
 
@@ -173,8 +173,12 @@ public sealed class GameLibrarySyncService
         if (File.Exists(path))
         {
             string existing = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-            if (string.Equals(existing, content, StringComparison.Ordinal)) return;
+            if (string.Equals(existing, content, StringComparison.Ordinal))
+            {
+                return;
+            }
         }
+
         await File.WriteAllTextAsync(path, content, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
     }
 }

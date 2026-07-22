@@ -5,38 +5,95 @@
 <div id="AkumaGamesConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
   <div data-role="content">
     <div class="content-primary">
-      <h2>Akuma Games</h2>
-      <p>O plugin sincroniza automaticamente a API Akumanimes e cria a biblioteca nativa Games.</p>
+      <h2>Akuma Games v0.2</h2>
+      <p>O plugin mantém um catálogo próprio e abre os games em uma página dedicada. Ele não cria mais arquivos <code>.strm</code> e não envia games para o player de vídeo do Jellyfin.</p>
+      <div class="paperList" style="padding:1em;margin:1em 0;">
+        <strong>Migração automática</strong>
+        <p style="margin-bottom:0;">Na próxima sincronização, os arquivos de vídeo criados pela versão antiga serão removidos. A biblioteca legada poderá ficar vazia; use a opção <strong>Games</strong> do menu principal.</p>
+      </div>
       <form id="AkumaGamesConfigForm">
-        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="ApiUrl">URL da API</label><input id="ApiUrl" is="emby-input" type="text" /></div>
-        <div class="inputContainer"><label class="inputLabel inputLabelUnfocused" for="LibraryName">Nome da biblioteca</label><input id="LibraryName" is="emby-input" type="text" /></div>
-        <div class="checkboxContainer checkboxContainer-withDescription"><label><input id="SyncOnStartup" type="checkbox" is="emby-checkbox" /><span>Sincronizar ao iniciar</span></label></div>
-        <button is="emby-button" type="submit" class="raised button-submit block"><span>Salvar</span></button>
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="ApiUrl">URL da API</label>
+          <input id="ApiUrl" is="emby-input" type="url" required />
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="SyncIntervalHours">Intervalo de sincronização em horas</label>
+          <input id="SyncIntervalHours" is="emby-input" type="number" min="1" max="168" />
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input id="SyncOnStartup" type="checkbox" is="emby-checkbox" /><span>Sincronizar ao iniciar o Jellyfin</span></label>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input id="DownloadImages" type="checkbox" is="emby-checkbox" /><span>Baixar capas para o cache local</span></label>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input id="RemoveMissingGames" type="checkbox" is="emby-checkbox" /><span>Remover do cache os games que saíram da API</span></label>
+        </div>
+        <button is="emby-button" type="submit" class="raised button-submit block"><span>Salvar configurações</span></button>
+        <button id="AkumaGamesSyncNow" is="emby-button" type="button" class="raised block" style="margin-top:.8em;"><span>Sincronizar agora</span></button>
       </form>
+      <div id="AkumaGamesConfigStatus" style="margin-top:1em;"></div>
     </div>
   </div>
   <script type="text/javascript">
     (function () {
       const pluginId = '0fe9988e-21a1-4e59-aed7-4cf2e3858143';
       const page = document.querySelector('#AkumaGamesConfigPage');
+      const status = page.querySelector('#AkumaGamesConfigStatus');
+
       page.addEventListener('pageshow', async function () {
         Dashboard.showLoadingMsg();
-        const config = await ApiClient.getPluginConfiguration(pluginId);
-        page.querySelector('#ApiUrl').value = config.ApiUrl || '';
-        page.querySelector('#LibraryName').value = config.LibraryName || 'Games';
-        page.querySelector('#SyncOnStartup').checked = config.SyncOnStartup !== false;
-        Dashboard.hideLoadingMsg();
+        try {
+          const config = await ApiClient.getPluginConfiguration(pluginId);
+          page.querySelector('#ApiUrl').value = config.ApiUrl || 'https://play.hoststorm.cloud/api/akumanimes';
+          page.querySelector('#SyncIntervalHours').value = config.SyncIntervalHours || 12;
+          page.querySelector('#SyncOnStartup').checked = config.SyncOnStartup !== false;
+          page.querySelector('#DownloadImages').checked = config.DownloadImages !== false;
+          page.querySelector('#RemoveMissingGames').checked = config.RemoveMissingGames !== false;
+        } finally {
+          Dashboard.hideLoadingMsg();
+        }
       });
-      page.querySelector('#AkumaGamesConfigForm').addEventListener('submit', async function (e) {
-        e.preventDefault();
+
+      page.querySelector('#AkumaGamesConfigForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
         Dashboard.showLoadingMsg();
-        const config = await ApiClient.getPluginConfiguration(pluginId);
-        config.ApiUrl = page.querySelector('#ApiUrl').value;
-        config.LibraryName = page.querySelector('#LibraryName').value;
-        config.SyncOnStartup = page.querySelector('#SyncOnStartup').checked;
-        await ApiClient.updatePluginConfiguration(pluginId, config);
-        Dashboard.processPluginConfigurationUpdateResult();
+        try {
+          const config = await ApiClient.getPluginConfiguration(pluginId);
+          config.ApiUrl = page.querySelector('#ApiUrl').value.trim();
+          config.SyncIntervalHours = Math.max(1, Math.min(168, Number(page.querySelector('#SyncIntervalHours').value) || 12));
+          config.SyncOnStartup = page.querySelector('#SyncOnStartup').checked;
+          config.DownloadImages = page.querySelector('#DownloadImages').checked;
+          config.RemoveMissingGames = page.querySelector('#RemoveMissingGames').checked;
+          config.AutoCreateLibrary = false;
+          await ApiClient.updatePluginConfiguration(pluginId, config);
+          status.textContent = 'Configurações salvas.';
+          Dashboard.processPluginConfigurationUpdateResult();
+        } catch (error) {
+          console.error('Akuma Games:', error);
+          status.textContent = 'Não foi possível salvar as configurações.';
+          Dashboard.hideLoadingMsg();
+        }
         return false;
+      });
+
+      page.querySelector('#AkumaGamesSyncNow').addEventListener('click', async function () {
+        Dashboard.showLoadingMsg();
+        status.textContent = 'Sincronizando catálogo...';
+        try {
+          const result = await ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('AkumaGames/Sync'),
+            dataType: 'json'
+          });
+          const total = result.count !== undefined ? result.count : result.Count;
+          status.textContent = 'Sincronização concluída: ' + total + ' games. Nenhum vídeo foi criado.';
+        } catch (error) {
+          console.error('Akuma Games:', error);
+          status.textContent = 'Falha ao sincronizar. Consulte os registros do Jellyfin.';
+        } finally {
+          Dashboard.hideLoadingMsg();
+        }
       });
     })();
   </script>
