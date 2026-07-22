@@ -54,6 +54,62 @@ public sealed class AkumaGamesController : ControllerBase
         return Ok(new GameCatalogResponse(DateTimeOffset.UtcNow, items.Length, items));
     }
 
+    /// <summary>
+    /// Retorna somente as poucas categorias da raiz Games. O Jellyfin Web usa este
+    /// endpoint para desenhar a tela imediatamente, sem esperar a consulta nativa
+    /// percorrer os milhares de diretórios de games.
+    /// </summary>
+    [HttpGet("FastLibrary/{parentId:guid}")]
+    public async Task<ActionResult<object>> GetFastLibrary(
+        Guid parentId,
+        CancellationToken cancellationToken)
+    {
+        var parent = _libraryManager.GetItemById(parentId);
+        if (parent is null || !PathsEqual(parent.Path, _syncService.LibraryPath))
+        {
+            return NotFound();
+        }
+
+        IReadOnlyList<AkumaGame> games = await _catalogStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (games.Count == 0)
+        {
+            return NotFound();
+        }
+
+        var categories = games
+            .GroupBy(
+                game => string.IsNullOrWhiteSpace(game.System) ? "Outros sistemas" : game.System.Trim(),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                string systemPath = Path.Combine(_syncService.LibraryPath, SafeSegment(group.Key));
+                var folder = _libraryManager.FindByPath(systemPath, true);
+                AkumaGame representative = group
+                    .OrderByDescending(game => !string.IsNullOrWhiteSpace(game.ImageUrl))
+                    .ThenBy(game => game.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .First();
+
+                return new
+                {
+                    name = group.Key,
+                    count = group.Count(),
+                    itemId = folder?.Id ?? Guid.Empty,
+                    imageUrl = representative.ImageUrl ?? string.Empty
+                };
+            })
+            .OrderBy(category => category.name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
+        return Ok(new
+        {
+            kind = "root",
+            parentId,
+            title = Plugin.Instance?.Configuration.LibraryName?.Trim() ?? "Games",
+            totalGames = games.Count,
+            categories
+        });
+    }
+
     [HttpGet("Games/{id:int}")]
     public async Task<ActionResult<GameCatalogItem>> GetGame(
         int id,
@@ -243,5 +299,42 @@ public sealed class AkumaGamesController : ControllerBase
         IReadOnlyList<AkumaGame> games = await _client.GetAllGamesAsync(cancellationToken).ConfigureAwait(false);
         await _catalogStore.SaveAsync(games, cancellationToken).ConfigureAwait(false);
         return games.FirstOrDefault(item => item.Id == id);
+    }
+
+    private static bool PathsEqual(string? left, string right)
+    {
+        if (string.IsNullOrWhiteSpace(left))
+        {
+            return false;
+        }
+
+        try
+        {
+            string normalizedLeft = Path.GetFullPath(left)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string normalizedRight = Path.GetFullPath(right)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static string SafeSegment(string value)
+    {
+        string cleaned = string.Join(
+            "_",
+            (value ?? string.Empty).Split(
+                Path.GetInvalidFileNameChars(),
+                StringSplitOptions.RemoveEmptyEntries)).Trim();
+
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            cleaned = "Sem nome";
+        }
+
+        return cleaned.Length <= 120 ? cleaned : cleaned[..120].Trim();
     }
 }
