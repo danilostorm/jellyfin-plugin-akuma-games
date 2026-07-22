@@ -1,23 +1,41 @@
-/* Akuma Games Web Bridge v0.2.2
- * Intercepta o botão Reproduzir dos itens da biblioteca Games e abre o game HTML5.
+/* Akuma Games Persistent Web Bridge v0.2.3
+ * Liga os itens da biblioteca nativa Games ao PlayerUrl HTML5 da API Akumanimes.
+ * Não usa o player de vídeo nem o visualizador de imagens do Jellyfin.
  */
 (function () {
     'use strict';
 
-    if (window.__akumaGamesBridgeLoaded) return;
-    window.__akumaGamesBridgeLoaded = true;
+    const VERSION = '0.2.3';
+    if (window.__akumaGamesBridgeLoaded === VERSION) return;
+    window.__akumaGamesBridgeLoaded = VERSION;
 
     const state = {
         itemId: '',
         game: null,
         resolving: false,
+        pendingLaunch: false,
+        autoLaunchedFor: '',
         lastHash: '',
-        routeTimer: 0
+        routeTimer: 0,
+        observer: null
     };
 
+    function currentHash() {
+        return String(window.location.hash || '');
+    }
+
     function getItemIdFromHash() {
-        const match = String(window.location.hash || '').match(/[?&]id=([0-9a-fA-F-]{32,36})/);
-        return match ? match[1] : '';
+        const hash = currentHash();
+        const queryIndex = hash.indexOf('?');
+        if (queryIndex < 0) return '';
+
+        try {
+            const params = new URLSearchParams(hash.slice(queryIndex + 1));
+            return String(params.get('id') || '').trim();
+        } catch (_) {
+            const match = hash.match(/[?&]id=([0-9a-fA-F-]{32,36})/);
+            return match ? match[1] : '';
+        }
     }
 
     function valueOf(object, camel, pascal) {
@@ -25,24 +43,37 @@
         return object[camel] !== undefined ? object[camel] : object[pascal];
     }
 
-    async function apiGet(path) {
-        if (!window.ApiClient || typeof ApiClient.ajax !== 'function') {
-            throw new Error('ApiClient ainda não está disponível');
-        }
+    function waitForApiClient(timeoutMs) {
+        const startedAt = Date.now();
+        return new Promise(function (resolve, reject) {
+            (function check() {
+                if (window.ApiClient && typeof window.ApiClient.ajax === 'function') {
+                    resolve(window.ApiClient);
+                    return;
+                }
+                if (Date.now() - startedAt >= timeoutMs) {
+                    reject(new Error('ApiClient não ficou disponível.'));
+                    return;
+                }
+                window.setTimeout(check, 120);
+            })();
+        });
+    }
 
-        return ApiClient.ajax({
+    async function apiGet(path) {
+        const client = await waitForApiClient(15000);
+        return client.ajax({
             type: 'GET',
-            url: ApiClient.getUrl(path),
+            url: client.getUrl(path),
             dataType: 'json'
         });
     }
 
-    function ensureOverlay() {
-        let overlay = document.getElementById('AkumaNativeGameOverlay');
-        if (overlay) return overlay;
+    function ensureStyles() {
+        if (document.getElementById('AkumaPersistentBridgeStyles')) return;
 
         const style = document.createElement('style');
-        style.id = 'AkumaNativeGameStyles';
+        style.id = 'AkumaPersistentBridgeStyles';
         style.textContent = [
             '#AkumaNativeGameOverlay{position:fixed;inset:0;z-index:2147483646;display:none;flex-direction:column;background:#050505;color:#fff}',
             '#AkumaNativeGameOverlay.akuma-open{display:flex}',
@@ -52,17 +83,47 @@
             '.akuma-native-game-button:hover,.akuma-native-game-button:focus{background:#3b3b3b}',
             '#AkumaNativeGameFrame{width:100%;flex:1;border:0;background:#000}',
             'body.akuma-native-game-active{overflow:hidden!important}',
-            '#itemDetailPage.akuma-game-detail .btnPlay .buttonText:after{content:"Jogar"}',
-            '#itemDetailPage.akuma-game-detail .btnPlay .buttonText{font-size:0}',
-            '#itemDetailPage.akuma-game-detail .btnPlay .buttonText:after{font-size:initial}',
-            '@media(max-width:600px){#AkumaNativeGameBar{flex-wrap:wrap}#AkumaNativeGameTitle{flex-basis:100%}.akuma-native-game-button{flex:1}}'
+            '#AkumaGameLaunchButton{display:inline-flex!important;align-items:center;justify-content:center;gap:.55em;min-width:9.5em}',
+            '#AkumaGameLaunchButton:before{content:"🎮"}',
+            '.akuma-game-detail .btnPlay:not(#AkumaGameLaunchButton),.akuma-game-detail .playActionButton:not(#AkumaGameLaunchButton),.akuma-game-detail [data-action="play"]:not(#AkumaGameLaunchButton){display:none!important}',
+            '.akuma-game-detail .detailImageContainer,.akuma-game-detail .itemDetailImage,.akuma-game-detail .primaryImageWrapper{cursor:pointer}',
+            '#AkumaBridgeBadge{position:fixed;right:12px;bottom:12px;z-index:2147483000;padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.78);color:#8ee7ff;font-size:12px;line-height:1;display:none;box-shadow:0 2px 12px rgba(0,0,0,.35)}',
+            '#AkumaBridgeBadge.show{display:block}',
+            '@media(max-width:600px){#AkumaNativeGameBar{flex-wrap:wrap}#AkumaNativeGameTitle{flex-basis:100%}.akuma-native-game-button{flex:1}#AkumaGameLaunchButton{width:100%}}'
         ].join('');
         document.head.appendChild(style);
+    }
+
+    function ensureBadge() {
+        let badge = document.getElementById('AkumaBridgeBadge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'AkumaBridgeBadge';
+            badge.textContent = 'Akuma Bridge ' + VERSION;
+            document.body.appendChild(badge);
+        }
+        return badge;
+    }
+
+    function flashBadge(text, duration) {
+        const badge = ensureBadge();
+        badge.textContent = text;
+        badge.classList.add('show');
+        window.clearTimeout(badge.__akumaTimer);
+        badge.__akumaTimer = window.setTimeout(function () {
+            badge.classList.remove('show');
+        }, duration || 2200);
+    }
+
+    function ensureOverlay() {
+        let overlay = document.getElementById('AkumaNativeGameOverlay');
+        if (overlay) return overlay;
 
         overlay = document.createElement('div');
         overlay.id = 'AkumaNativeGameOverlay';
         overlay.setAttribute('role', 'dialog');
         overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Executando game');
         overlay.innerHTML = [
             '<div id="AkumaNativeGameBar">',
             '<div id="AkumaNativeGameTitle">Game</div>',
@@ -93,17 +154,21 @@
 
     function openGame(game) {
         if (!game || !game.playerUrl) return;
+
         state.game = game;
+        state.pendingLaunch = false;
         const overlay = ensureOverlay();
         overlay.querySelector('#AkumaNativeGameTitle').textContent = game.title || 'Game';
         overlay.querySelector('#AkumaNativeGameFrame').src = game.playerUrl;
         overlay.classList.add('akuma-open');
         document.body.classList.add('akuma-native-game-active');
+        flashBadge('Abrindo ' + (game.title || 'game') + '…', 1400);
     }
 
     function closeGame() {
         const overlay = document.getElementById('AkumaNativeGameOverlay');
         if (!overlay) return;
+
         overlay.classList.remove('akuma-open');
         const frame = overlay.querySelector('#AkumaNativeGameFrame');
         if (frame) frame.src = 'about:blank';
@@ -113,6 +178,7 @@
     function normalizeLaunchResponse(response) {
         const playerUrl = String(valueOf(response, 'playerUrl', 'PlayerUrl') || '');
         if (!playerUrl) return null;
+
         return {
             id: Number(valueOf(response, 'id', 'Id') || 0),
             title: String(valueOf(response, 'title', 'Title') || 'Game'),
@@ -120,20 +186,92 @@
         };
     }
 
-    function markDetailPage(isGame) {
-        const page = document.querySelector('#itemDetailPage');
-        if (!page) return;
-        page.classList.toggle('akuma-game-detail', Boolean(isGame));
+    function findDetailPage() {
+        return document.querySelector('#itemDetailPage, .itemDetailPage, [data-role="page"].itemDetailPage');
+    }
 
-        if (!isGame) return;
-        const playButtons = page.querySelectorAll('.btnPlay, .playActionButton, [data-action="play"]');
-        playButtons.forEach(function (button) {
-            button.setAttribute('data-akuma-game-play', '1');
-            button.setAttribute('aria-label', 'Jogar');
-            button.setAttribute('title', 'Jogar');
-            const text = button.querySelector('.buttonText');
-            if (text) text.textContent = 'Jogar';
+    function findActionContainer(page) {
+        if (!page) return null;
+        return page.querySelector('.mainDetailButtons, .detailButtons, .itemDetailActions, .detailPagePrimaryContainer .buttons, .itemDetailsGroup');
+    }
+
+    function ensureLaunchButton() {
+        if (!state.game) return;
+
+        const page = findDetailPage();
+        if (!page) return;
+        page.classList.add('akuma-game-detail');
+
+        let button = page.querySelector('#AkumaGameLaunchButton');
+        if (!button) {
+            button = document.createElement('button');
+            button.id = 'AkumaGameLaunchButton';
+            button.type = 'button';
+            button.className = 'raised button-submit emby-button akumaGameLaunchButton';
+            button.textContent = 'Jogar agora';
+            button.setAttribute('aria-label', 'Jogar agora');
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                openGame(state.game);
+            }, true);
+
+            const container = findActionContainer(page);
+            if (container) {
+                container.insertBefore(button, container.firstChild);
+            } else {
+                button.style.position = 'fixed';
+                button.style.right = '1.5em';
+                button.style.bottom = '1.5em';
+                button.style.zIndex = '2147482000';
+                page.appendChild(button);
+            }
+        }
+
+        const nativeButtons = page.querySelectorAll('.btnPlay, .playActionButton, [data-action="play"]');
+        nativeButtons.forEach(function (nativeButton) {
+            if (nativeButton.id === 'AkumaGameLaunchButton') return;
+            nativeButton.setAttribute('data-akuma-native-disabled', '1');
+            nativeButton.setAttribute('aria-hidden', 'true');
+            nativeButton.tabIndex = -1;
         });
+    }
+
+    function clearDetailDecoration() {
+        document.querySelectorAll('.akuma-game-detail').forEach(function (page) {
+            page.classList.remove('akuma-game-detail');
+        });
+        document.querySelectorAll('#AkumaGameLaunchButton').forEach(function (button) {
+            button.remove();
+        });
+    }
+
+    function shouldCaptureNativeMediaTarget(target) {
+        if (!(target instanceof Element)) return false;
+        const page = target.closest('#itemDetailPage, .itemDetailPage');
+        if (!page || !page.classList.contains('akuma-game-detail')) return false;
+
+        return Boolean(target.closest([
+            '.btnPlay',
+            '.playActionButton',
+            '[data-action="play"]',
+            '.detailImageContainer',
+            '.itemDetailImage',
+            '.primaryImageWrapper',
+            '.cardImageContainer',
+            '.detailImageContainerInner',
+            '.itemDetailImageContainer'
+        ].join(',')));
+    }
+
+    function captureNativeAction(event) {
+        if (!state.game || getItemIdFromHash() !== state.itemId) return;
+        if (!shouldCaptureNativeMediaTarget(event.target)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        openGame(state.game);
     }
 
     async function resolveCurrentRoute() {
@@ -141,86 +279,135 @@
         if (!itemId) {
             state.itemId = '';
             state.game = null;
-            markDetailPage(false);
+            state.resolving = false;
+            state.pendingLaunch = false;
+            clearDetailDecoration();
             return;
         }
 
-        if (state.itemId === itemId && (state.game || state.resolving)) {
-            markDetailPage(Boolean(state.game));
+        if (state.itemId === itemId && state.game) {
+            ensureLaunchButton();
             return;
         }
+        if (state.itemId === itemId && state.resolving) return;
 
         state.itemId = itemId;
         state.game = null;
         state.resolving = true;
-        markDetailPage(false);
+        clearDetailDecoration();
 
         try {
             const response = await apiGet('AkumaGames/ResolveItem/' + encodeURIComponent(itemId));
             if (state.itemId !== itemId) return;
+
             state.game = normalizeLaunchResponse(response);
-            markDetailPage(Boolean(state.game));
+            if (!state.game) throw new Error('PlayerUrl vazio.');
+
+            ensureLaunchButton();
+            flashBadge('Game detectado · Bridge ' + VERSION, 2200);
+
+            // Abre automaticamente ao entrar no item da biblioteca. Isso evita que o
+            // visualizador de fotos do Jellyfin assuma a capa antes do clique.
+            if (state.autoLaunchedFor !== itemId) {
+                state.autoLaunchedFor = itemId;
+                window.setTimeout(function () {
+                    if (state.game && state.itemId === itemId && getItemIdFromHash() === itemId) {
+                        openGame(state.game);
+                    }
+                }, 320);
+            } else if (state.pendingLaunch) {
+                openGame(state.game);
+            }
         } catch (error) {
             if (state.itemId === itemId) {
                 state.game = null;
-                markDetailPage(false);
+                state.pendingLaunch = false;
+                clearDetailDecoration();
+            }
+            if (error && Number(error.status) !== 404) {
+                console.warn('Akuma Games Bridge: falha ao resolver item.', error);
             }
         } finally {
             if (state.itemId === itemId) state.resolving = false;
         }
     }
 
-    function scheduleRouteCheck() {
+    function scheduleRouteCheck(delay) {
         window.clearTimeout(state.routeTimer);
-        state.routeTimer = window.setTimeout(resolveCurrentRoute, 100);
+        state.routeTimer = window.setTimeout(resolveCurrentRoute, delay || 80);
     }
 
-    document.addEventListener('click', function (event) {
-        const button = event.target.closest('.btnPlay, .playActionButton, [data-action="play"], [data-akuma-game-play="1"]');
-        if (!button || !state.game || getItemIdFromHash() !== state.itemId) return;
+    function onRouteMutation() {
+        const hash = currentHash();
+        if (hash !== state.lastHash) {
+            state.lastHash = hash;
+            closeGame();
+            state.autoLaunchedFor = '';
+            scheduleRouteCheck(80);
+        } else if (state.game) {
+            ensureLaunchButton();
+        }
+    }
 
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
-        openGame(state.game);
-    }, true);
+    function status() {
+        return {
+            version: VERSION,
+            loaded: true,
+            itemId: state.itemId,
+            resolving: state.resolving,
+            game: state.game,
+            hash: currentHash(),
+            overlayOpen: Boolean(document.querySelector('#AkumaNativeGameOverlay.akuma-open'))
+        };
+    }
 
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape') {
+    function start() {
+        ensureStyles();
+        ensureOverlay();
+        ensureBadge();
+
+        document.addEventListener('pointerdown', captureNativeAction, true);
+        document.addEventListener('mousedown', captureNativeAction, true);
+        document.addEventListener('touchstart', captureNativeAction, { capture: true, passive: false });
+        document.addEventListener('click', captureNativeAction, true);
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape') return;
             const overlay = document.getElementById('AkumaNativeGameOverlay');
             if (overlay && overlay.classList.contains('akuma-open')) {
                 event.preventDefault();
+                event.stopPropagation();
                 closeGame();
             }
-        }
-    }, true);
+        }, true);
 
-    window.addEventListener('hashchange', scheduleRouteCheck);
-    window.addEventListener('popstate', scheduleRouteCheck);
+        window.addEventListener('hashchange', function () {
+            state.lastHash = currentHash();
+            closeGame();
+            state.autoLaunchedFor = '';
+            scheduleRouteCheck(50);
+        });
+        window.addEventListener('popstate', function () {
+            state.autoLaunchedFor = '';
+            scheduleRouteCheck(50);
+        });
 
-    const observer = new MutationObserver(function () {
-        const hash = String(window.location.hash || '');
-        if (hash !== state.lastHash) {
-            state.lastHash = hash;
-            scheduleRouteCheck();
-        } else if (state.game) {
-            markDetailPage(true);
-        }
-    });
+        state.observer = new MutationObserver(onRouteMutation);
+        state.observer.observe(document.documentElement, { childList: true, subtree: true });
 
-    function start() {
-        ensureOverlay();
-        observer.observe(document.documentElement, { childList: true, subtree: true });
-        state.lastHash = String(window.location.hash || '');
-        scheduleRouteCheck();
-        window.setInterval(function () {
-            const hash = String(window.location.hash || '');
-            if (hash !== state.lastHash) {
-                state.lastHash = hash;
-                scheduleRouteCheck();
-            }
-        }, 750);
-        console.info('Akuma Games Web Bridge v0.2.2 carregado.');
+        state.lastHash = currentHash();
+        scheduleRouteCheck(100);
+        window.setInterval(onRouteMutation, 600);
+
+        window.AkumaGamesBridge = {
+            version: VERSION,
+            status: status,
+            open: function () { if (state.game) openGame(state.game); },
+            close: closeGame,
+            refresh: function () { state.itemId = ''; scheduleRouteCheck(0); }
+        };
+
+        console.info('Akuma Games Persistent Web Bridge v' + VERSION + ' carregado.');
     }
 
     if (document.readyState === 'loading') {
