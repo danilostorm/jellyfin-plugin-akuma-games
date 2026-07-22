@@ -29,7 +29,7 @@ public sealed class SyncGamesTask : IScheduledTask
         [
             new TaskTriggerInfo
             {
-                Type = TaskTriggerInfo.TriggerInterval,
+                Type = TaskTriggerInfoType.IntervalTrigger,
                 IntervalTicks = TimeSpan.FromHours(hours).Ticks
             }
         ];
