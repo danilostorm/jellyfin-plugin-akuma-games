@@ -55,6 +55,8 @@ public sealed class GameLibrarySyncService
             progress?.Report(5);
 
             var activeDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var preparedSystems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var systemsWithImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int completed = 0;
 
             foreach (AkumaGame game in games)
@@ -69,7 +71,11 @@ public sealed class GameLibrarySyncService
                 Directory.CreateDirectory(gamePath);
                 activeDirectories.Add(Path.GetFullPath(gamePath));
 
-                await EnsureSystemMetadataAsync(systemPath, game.System, cancellationToken).ConfigureAwait(false);
+                if (preparedSystems.Add(systemPath))
+                {
+                    await EnsureSystemMetadataAsync(systemPath, game.System, cancellationToken).ConfigureAwait(false);
+                }
+
                 DeleteLegacyVideoFiles(gamePath);
 
                 string metadata = JsonSerializer.Serialize(game, JsonOptions);
@@ -86,6 +92,16 @@ public sealed class GameLibrarySyncService
                 if (Plugin.Instance?.Configuration.DownloadImages == true && !string.IsNullOrWhiteSpace(game.ImageUrl))
                 {
                     await EnsureGameImagesAsync(game, gamePath, gameName, cancellationToken).ConfigureAwait(false);
+                }
+
+                // A biblioteca Home Videos costuma procurar uma imagem herdada dentro de
+                // centenas de filhos quando a pasta do sistema não possui folder.jpg.
+                // Criar uma capa local por sistema elimina essa varredura recursiva e faz
+                // Arcade, NES, PlayStation etc. aparecerem rapidamente na raiz Games.
+                if (!systemsWithImages.Contains(systemPath)
+                    && await EnsureSystemImageAsync(game, systemPath, gamePath, gameName, cancellationToken).ConfigureAwait(false))
+                {
+                    systemsWithImages.Add(systemPath);
                 }
 
                 completed++;
@@ -105,7 +121,7 @@ public sealed class GameLibrarySyncService
             _libraryManager.QueueLibraryScan();
             progress?.Report(100);
             _logger.LogInformation(
-                "Akuma Games: catálogo sincronizado com {Count} games. Biblioteca nativa atualizada sem criar vídeos.",
+                "Akuma Games: catálogo sincronizado com {Count} games. Biblioteca nativa atualizada com capas locais de categorias.",
                 games.Count);
             return games.Count;
         }
@@ -205,6 +221,51 @@ public sealed class GameLibrarySyncService
         {
             _logger.LogWarning(ex, "Não foi possível criar a imagem de pasta de {Game}.", game.Title);
         }
+    }
+
+    private async Task<bool> EnsureSystemImageAsync(
+        AkumaGame game,
+        string systemPath,
+        string gamePath,
+        string safeGameName,
+        CancellationToken cancellationToken)
+    {
+        string systemImagePath = Path.Combine(systemPath, "folder.jpg");
+        if (File.Exists(systemImagePath) && new FileInfo(systemImagePath).Length > 0)
+        {
+            return true;
+        }
+
+        string[] localCandidates =
+        [
+            Path.Combine(gamePath, safeGameName + ".jpg"),
+            Path.Combine(gamePath, "folder.jpg"),
+            Path.Combine(gamePath, "poster.jpg")
+        ];
+
+        try
+        {
+            string? localImage = localCandidates.FirstOrDefault(path => File.Exists(path) && new FileInfo(path).Length > 0);
+            if (localImage is not null)
+            {
+                File.Copy(localImage, systemImagePath, true);
+                return true;
+            }
+
+            // Mesmo quando o administrador desativa o download de todas as capas,
+            // baixamos somente uma imagem por sistema para manter a raiz da biblioteca rápida.
+            if (!string.IsNullOrWhiteSpace(game.ImageUrl))
+            {
+                await _client.DownloadImageAsync(game.ImageUrl, systemImagePath, cancellationToken).ConfigureAwait(false);
+                return File.Exists(systemImagePath) && new FileInfo(systemImagePath).Length > 0;
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Não foi possível criar a capa rápida da categoria {System}.", game.System);
+        }
+
+        return false;
     }
 
     private static async Task EnsureSystemMetadataAsync(
