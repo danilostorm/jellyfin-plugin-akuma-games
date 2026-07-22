@@ -32,7 +32,7 @@ jobs:
           node --check web/akuma-games-bridge.js
           node --check web/akuma-games-fast-root.js
           node --check web/akuma-games-card-click.js
-          bash -n unraid/install-akuma-games-v0.2.3.8.sh
+          bash -n unraid/install-akuma-games-v0.2.3.9.sh
 
       - name: Build plugin
         run: |
@@ -41,7 +41,7 @@ jobs:
 
       - name: Package plugin and persistent Unraid bridge
         run: |
-          VERSION='0.2.3.8'
+          VERSION='0.2.3.9'
           PLUGIN_ZIP="Jellyfin.Plugin.AkumaGames_${VERSION}.zip"
           BUNDLE_NAME="AkumaGames-v${VERSION}-Unraid"
 
@@ -57,33 +57,42 @@ jobs:
           cp web/akuma-games-bridge.js "repository/${BUNDLE_NAME}/web/"
           cp web/akuma-games-fast-root.js "repository/${BUNDLE_NAME}/web/"
           cp web/akuma-games-card-click.js "repository/${BUNDLE_NAME}/web/"
-          cp unraid/install-akuma-games-v0.2.3.8.sh "repository/${BUNDLE_NAME}/unraid/"
-          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.8.sh"
+          cp unraid/install-akuma-games-v0.2.3.9.sh "repository/${BUNDLE_NAME}/unraid/"
+          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.9.sh"
           cat > "repository/${BUNDLE_NAME}/LEIA-ME.txt" <<'TXT'
-          AKUMA GAMES v0.2.3.8 - UNRAID / JELLYFIN 10.11.11
+          AKUMA GAMES v0.2.3.9 - UNRAID / JELLYFIN 10.11.11
 
-          BIBLIOTECA GAMES NO MESMO MODO DA PÁGINA DO PLUGIN
+          CATÁLOGO UNIFICADO PARA PC E ANDROID
 
-          Ao clicar na biblioteca Games pelo Jellyfin Web, esta versão não abre mais a
-          listagem nativa lenta de categorias. Ela abre diretamente o catálogo rápido com:
-          busca, sistemas, gêneros, cards dos 2.341 games e botão Jogar.
+          Ao clicar na biblioteca Games, o navegador e o aplicativo Jellyfin Android
+          baseado no Jellyfin Web abrem o mesmo catálogo rápido, sem entrar na raiz
+          nativa lenta de Arcade, NES, PlayStation e outras pastas.
 
-          A biblioteca nativa continua existindo no servidor para clientes como Android TV
-          e Fire TV. O redirecionamento rápido é aplicado somente no Jellyfin Web.
+          MELHORIAS
+          - Layout amplo e denso no computador.
+          - Layout responsivo com duas ou três colunas no celular e tablet.
+          - Busca e filtros fixos durante a rolagem.
+          - A capa inteira e o botão Jogar abrem o game.
+          - Carregamento progressivo automático ao rolar.
+          - Botão Voltar e botão físico do Android fecham primeiro o game e depois o catálogo.
+          - Tela de jogo usa 100dvh e respeita as áreas seguras do Android.
+          - Cache local por 24 horas para abertura imediata.
 
           INSTALAÇÃO
           1. Extraia este ZIP no Unraid.
           2. Abra o terminal na pasta extraída.
           3. Execute:
-             bash unraid/install-akuma-games-v0.2.3.8.sh
-          4. Feche todas as abas do Jellyfin e teste em janela anônima.
+             bash unraid/install-akuma-games-v0.2.3.9.sh
+          4. No computador, feche todas as abas do Jellyfin.
+          5. No Android, force a parada do aplicativo e abra novamente.
 
           Não é necessário sincronizar os games novamente.
 
           DIAGNÓSTICO NO CONSOLE
              AkumaGamesFastRootBridge.status()
 
-          O resultado deve mostrar version 0.2.3.8, cached true e games 2341.
+          O resultado deve mostrar version 0.2.3.9, cached true e o modo
+          desktop ou android-mobile.
           TXT
           cd repository
           zip -9 -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}"
@@ -98,13 +107,13 @@ jobs:
               "category": "General",
               "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
               "name": "Akuma Games",
-              "description": "Biblioteca Games com catálogo público rápido e launcher HTML5.",
+              "description": "Biblioteca Games com catálogo unificado para PC e Android.",
               "owner": "danilostorm",
-              "overview": "A biblioteca abre o mesmo catálogo rápido da página do plugin",
+              "overview": "Catálogo rápido e responsivo no computador e celular",
               "versions": [
                 {
                   "checksum": "${CHECKSUM}",
-                  "changelog": "Substitui a raiz nativa lenta pelo catálogo público rápido com busca, filtros e botão Jogar.",
+                  "changelog": "Unifica PC e Android com layout responsivo, card inteiro clicável, rolagem progressiva e navegação pelo botão Voltar.",
                   "targetAbi": "10.11.11.0",
                   "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/${PLUGIN_ZIP}",
                   "timestamp": "${TIMESTAMP}",
@@ -118,10 +127,10 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Akuma-Games-v0.2.3.8
+          name: Akuma-Games-v0.2.3.9
           path: |
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.8.zip
-            repository/AkumaGames-v0.2.3.8-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.9.zip
+            repository/AkumaGames-v0.2.3.9-Unraid.zip
             repository/manifest.json
 
       - name: Publish repository files
@@ -131,11 +140,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             repository/manifest.json \
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.8.zip \
-            repository/AkumaGames-v0.2.3.8-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.9.zip \
+            repository/AkumaGames-v0.2.3.9-Unraid.zip
           if git diff --cached --quiet; then
             echo "No changes to publish"
             exit 0
           fi
-          git commit -m "build: publish Akuma Games plugin v0.2.3.8"
+          git commit -m "build: publish Akuma Games plugin v0.2.3.9"
           git push
