@@ -1,11 +1,11 @@
-/* Akuma Games Persistent Web Bridge v0.2.3.3
+/* Akuma Games Persistent Web Bridge v0.2.3.4
  * Liga os itens da biblioteca nativa Games ao PlayerUrl HTML5 da API Akumanimes.
  * Não usa o player de vídeo nem o visualizador de imagens do Jellyfin.
  */
 (function () {
     'use strict';
 
-    const VERSION = '0.2.3.3';
+    const VERSION = '0.2.3.4';
     if (window.__akumaGamesBridgeLoaded === VERSION) return;
     window.__akumaGamesBridgeLoaded = VERSION;
 
@@ -120,17 +120,19 @@
 
     function setOverlayInteractive(overlay, interactive) {
         if (!overlay) return;
-        if (interactive) {
-            overlay.removeAttribute('hidden');
-            overlay.removeAttribute('inert');
-            overlay.style.pointerEvents = 'auto';
-            overlay.style.visibility = 'visible';
-        } else {
-            overlay.setAttribute('hidden', '');
-            overlay.setAttribute('inert', '');
-            overlay.style.pointerEvents = 'none';
-            overlay.style.visibility = 'hidden';
-        }
+
+        // Remove os atributos usados na v0.2.3.3. Eles podiam deixar o iframe
+        // permanentemente oculto em alguns navegadores mesmo após abrir o game.
+        if (overlay.hasAttribute('hidden')) overlay.removeAttribute('hidden');
+        if (overlay.hasAttribute('inert')) overlay.removeAttribute('inert');
+
+        const pointerEvents = interactive ? 'auto' : 'none';
+        const visibility = interactive ? 'visible' : 'hidden';
+        const ariaHidden = interactive ? 'false' : 'true';
+
+        if (overlay.style.pointerEvents !== pointerEvents) overlay.style.pointerEvents = pointerEvents;
+        if (overlay.style.visibility !== visibility) overlay.style.visibility = visibility;
+        if (overlay.getAttribute('aria-hidden') !== ariaHidden) overlay.setAttribute('aria-hidden', ariaHidden);
     }
 
     function ensureOverlay() {
@@ -180,12 +182,23 @@
         state.game = game;
         state.pendingLaunch = false;
         state.focusBeforeLaunch = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
         const overlay = ensureOverlay();
+        const frame = overlay.querySelector('#AkumaNativeGameFrame');
+        const requestedUrl = String(game.playerUrl);
+
         overlay.querySelector('#AkumaNativeGameTitle').textContent = game.title || 'Game';
-        overlay.querySelector('#AkumaNativeGameFrame').src = game.playerUrl;
-        setOverlayInteractive(overlay, true);
         overlay.classList.add('akuma-open');
+        setOverlayInteractive(overlay, true);
         document.body.classList.add('akuma-native-game-active');
+
+        // pointerdown, mousedown e click podem disparar na mesma ação. Não recarrega
+        // o iframe se o mesmo game já estiver sendo aberto.
+        if (frame && frame.dataset.akumaPlayerUrl !== requestedUrl) {
+            frame.dataset.akumaPlayerUrl = requestedUrl;
+            frame.src = requestedUrl;
+        }
+
         flashBadge('Abrindo ' + (game.title || 'game') + '…', 1400);
     }
 
@@ -199,6 +212,7 @@
         const frame = overlay.querySelector('#AkumaNativeGameFrame');
         if (frame) {
             try { frame.blur(); } catch (_) { /* sem ação */ }
+            delete frame.dataset.akumaPlayerUrl;
             frame.src = 'about:blank';
         }
 
@@ -355,9 +369,6 @@
         const overlay = document.getElementById('AkumaNativeGameOverlay');
         if (overlay && overlay.classList.contains('akuma-open')) {
             void closeGame();
-        } else if (overlay) {
-            setOverlayInteractive(overlay, false);
-            document.body.classList.remove('akuma-native-game-active');
         }
     }
 
@@ -432,11 +443,6 @@
         } else if (state.game) {
             ensureLaunchButton();
         }
-
-        const overlay = document.getElementById('AkumaNativeGameOverlay');
-        if (overlay && !overlay.classList.contains('akuma-open')) {
-            setOverlayInteractive(overlay, false);
-        }
     }
 
     function status() {
@@ -453,8 +459,11 @@
 
     function start() {
         ensureStyles();
-        ensureOverlay();
+        const overlay = ensureOverlay();
         ensureBadge();
+        overlay.classList.remove('akuma-open');
+        setOverlayInteractive(overlay, false);
+        document.body.classList.remove('akuma-native-game-active');
 
         document.addEventListener('pointerdown', releaseNavigation, true);
         document.addEventListener('mousedown', releaseNavigation, true);
@@ -468,8 +477,8 @@
 
         document.addEventListener('keydown', function (event) {
             if (event.key !== 'Escape') return;
-            const overlay = document.getElementById('AkumaNativeGameOverlay');
-            if (overlay && overlay.classList.contains('akuma-open')) {
+            const currentOverlay = document.getElementById('AkumaNativeGameOverlay');
+            if (currentOverlay && currentOverlay.classList.contains('akuma-open')) {
                 event.preventDefault();
                 event.stopPropagation();
                 void closeGame();
@@ -488,12 +497,13 @@
             scheduleRouteCheck(50);
         });
 
+        // Observa somente alterações estruturais. A v0.2.3.3 também observava
+        // class/style/hidden e podia criar um ciclo contínuo de mutações, travando
+        // o carregamento do iframe e da própria interface.
         state.observer = new MutationObserver(onRouteMutation);
         state.observer.observe(document.documentElement, {
             childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class', 'hidden', 'style']
+            subtree: true
         });
 
         state.lastHash = currentHash();
