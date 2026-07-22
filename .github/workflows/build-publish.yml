@@ -32,7 +32,7 @@ jobs:
           node --check web/akuma-games-bridge.js
           node --check web/akuma-games-fast-root.js
           node --check web/akuma-games-card-click.js
-          bash -n unraid/install-akuma-games-v0.2.3.7.sh
+          bash -n unraid/install-akuma-games-v0.2.3.8.sh
 
       - name: Build plugin
         run: |
@@ -41,7 +41,7 @@ jobs:
 
       - name: Package plugin and persistent Unraid bridge
         run: |
-          VERSION='0.2.3.7'
+          VERSION='0.2.3.8'
           PLUGIN_ZIP="Jellyfin.Plugin.AkumaGames_${VERSION}.zip"
           BUNDLE_NAME="AkumaGames-v${VERSION}-Unraid"
 
@@ -57,34 +57,33 @@ jobs:
           cp web/akuma-games-bridge.js "repository/${BUNDLE_NAME}/web/"
           cp web/akuma-games-fast-root.js "repository/${BUNDLE_NAME}/web/"
           cp web/akuma-games-card-click.js "repository/${BUNDLE_NAME}/web/"
-          cp unraid/install-akuma-games-v0.2.3.7.sh "repository/${BUNDLE_NAME}/unraid/"
-          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.7.sh"
+          cp unraid/install-akuma-games-v0.2.3.8.sh "repository/${BUNDLE_NAME}/unraid/"
+          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.8.sh"
           cat > "repository/${BUNDLE_NAME}/LEIA-ME.txt" <<'TXT'
-          AKUMA GAMES v0.2.3.7 - UNRAID / JELLYFIN 10.11.11
+          AKUMA GAMES v0.2.3.8 - UNRAID / JELLYFIN 10.11.11
 
-          CORREÇÃO REAL DO LOADING NA RAIZ GAMES
+          BIBLIOTECA GAMES NO MESMO MODO DA PÁGINA DO PLUGIN
 
-          A versão anterior esperava a rota /list começar e validava o parentId como se
-          ele fosse a pasta física. No Jellyfin Web, esse ID é normalmente uma UserView
-          sem Path, então o endpoint rápido retornava 404 e a listagem nativa lenta seguia.
+          Ao clicar na biblioteca Games pelo Jellyfin Web, esta versão não abre mais a
+          listagem nativa lenta de categorias. Ela abre diretamente o catálogo rápido com:
+          busca, sistemas, gêneros, cards dos 2.341 games e botão Jogar.
 
-          Nesta versão:
-          1. As sete categorias são pré-carregadas logo após o login.
-          2. O clique em Games é interceptado antes de iniciar a listagem nativa.
-          3. A tela rápida é pintada primeiro e fica em cache local por 24 horas.
-          4. UserView, pasta física e acesso direto à rota são reconhecidos.
+          A biblioteca nativa continua existindo no servidor para clientes como Android TV
+          e Fire TV. O redirecionamento rápido é aplicado somente no Jellyfin Web.
 
           INSTALAÇÃO
           1. Extraia este ZIP no Unraid.
           2. Abra o terminal na pasta extraída.
           3. Execute:
-             bash unraid/install-akuma-games-v0.2.3.7.sh
+             bash unraid/install-akuma-games-v0.2.3.8.sh
           4. Feche todas as abas do Jellyfin e teste em janela anônima.
+
+          Não é necessário sincronizar os games novamente.
 
           DIAGNÓSTICO NO CONSOLE
              AkumaGamesFastRootBridge.status()
 
-          O resultado deve mostrar version 0.2.3.7, cached true e lastError vazio.
+          O resultado deve mostrar version 0.2.3.8, cached true e games 2341.
           TXT
           cd repository
           zip -9 -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}"
@@ -99,13 +98,13 @@ jobs:
               "category": "General",
               "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
               "name": "Akuma Games",
-              "description": "Biblioteca nativa com raiz pré-carregada e launcher HTML5.",
+              "description": "Biblioteca Games com catálogo público rápido e launcher HTML5.",
               "owner": "danilostorm",
-              "overview": "Categorias instantâneas antes da listagem nativa",
+              "overview": "A biblioteca abre o mesmo catálogo rápido da página do plugin",
               "versions": [
                 {
                   "checksum": "${CHECKSUM}",
-                  "changelog": "Pré-carrega as categorias, reconhece a UserView Games e intercepta o clique antes da rota nativa lenta.",
+                  "changelog": "Substitui a raiz nativa lenta pelo catálogo público rápido com busca, filtros e botão Jogar.",
                   "targetAbi": "10.11.11.0",
                   "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/${PLUGIN_ZIP}",
                   "timestamp": "${TIMESTAMP}",
@@ -119,10 +118,10 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Akuma-Games-v0.2.3.7
+          name: Akuma-Games-v0.2.3.8
           path: |
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.7.zip
-            repository/AkumaGames-v0.2.3.7-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.8.zip
+            repository/AkumaGames-v0.2.3.8-Unraid.zip
             repository/manifest.json
 
       - name: Publish repository files
@@ -132,11 +131,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             repository/manifest.json \
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.7.zip \
-            repository/AkumaGames-v0.2.3.7-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.8.zip \
+            repository/AkumaGames-v0.2.3.8-Unraid.zip
           if git diff --cached --quiet; then
             echo "No changes to publish"
             exit 0
           fi
-          git commit -m "build: publish Akuma Games plugin v0.2.3.7"
+          git commit -m "build: publish Akuma Games plugin v0.2.3.8"
           git push
