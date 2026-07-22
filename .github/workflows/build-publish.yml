@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - 'Jellyfin.Plugin.AkumaGames/**'
-      - 'Jellyfin.Plugin.AkumaGames.sln'
       - '.github/workflows/build-publish.yml'
   pull_request:
     branches: [main]
@@ -28,8 +27,8 @@ jobs:
 
       - name: Build plugin
         run: |
-          dotnet restore Jellyfin.Plugin.AkumaGames.sln
-          dotnet build Jellyfin.Plugin.AkumaGames.sln -c Release --no-restore
+          dotnet restore Jellyfin.Plugin.AkumaGames/Jellyfin.Plugin.AkumaGames.csproj
+          dotnet build Jellyfin.Plugin.AkumaGames/Jellyfin.Plugin.AkumaGames.csproj -c Release --no-restore
 
       - name: Package plugin
         run: |
@@ -47,7 +46,7 @@ jobs:
               "category": "General",
               "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
               "name": "Akuma Games",
-              "description": "Sincroniza a API Akumanimes como uma biblioteca nativa do Jellyfin.",
+              "description": "Sincroniza o catálogo Akumanimes como uma biblioteca nativa do Jellyfin.",
               "owner": "danilostorm",
               "overview": "Games nativos no Jellyfin, Android TV e Fire TV",
               "versions": [
