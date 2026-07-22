@@ -1,0 +1,20 @@
+[
+  {
+    "category": "General",
+    "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
+    "name": "Akuma Games",
+    "description": "Sincroniza o catálogo Akumanimes como uma biblioteca nativa do Jellyfin.",
+    "owner": "danilostorm",
+    "overview": "Games nativos no Jellyfin, Android TV e Fire TV",
+    "versions": [
+      {
+        "checksum": "5cd8b5ead137b16fd336b9bda27398b5",
+        "changelog": "Primeira versão com biblioteca nativa Games, capas e metadados.",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/Jellyfin.Plugin.AkumaGames_0.1.0.0.zip",
+        "timestamp": "2026-07-22 00:19:14",
+        "version": "0.1.0.0"
+      }
+    ]
+  }
+]
