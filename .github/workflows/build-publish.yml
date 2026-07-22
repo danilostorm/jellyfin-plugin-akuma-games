@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'bootstrap/source.zip.b64.00'
+      - 'Jellyfin.Plugin.AkumaGames/**'
+      - 'Jellyfin.Plugin.AkumaGames.sln'
       - '.github/workflows/build-publish.yml'
   pull_request:
     branches: [main]
@@ -20,20 +21,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Decode source
-        run: |
-          base64 -d bootstrap/source.zip.b64.00 > /tmp/source.zip
-          rm -rf /tmp/akuma-src
-          mkdir -p /tmp/akuma-src
-          unzip -q /tmp/source.zip -d /tmp/akuma-src
-
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
 
       - name: Build plugin
-        working-directory: /tmp/akuma-src/jellyfin-plugin-akuma-games-src
         run: |
           dotnet restore Jellyfin.Plugin.AkumaGames.sln
           dotnet build Jellyfin.Plugin.AkumaGames.sln -c Release --no-restore
@@ -41,7 +34,7 @@ jobs:
       - name: Package plugin
         run: |
           mkdir -p repository/package
-          cp /tmp/akuma-src/jellyfin-plugin-akuma-games-src/Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll repository/package/
+          cp Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll repository/package/
           cd repository/package
           zip -9 ../Jellyfin.Plugin.AkumaGames_0.1.0.0.zip Jellyfin.Plugin.AkumaGames.dll
           cd ../..
