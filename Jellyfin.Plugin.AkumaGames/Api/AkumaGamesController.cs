@@ -211,8 +211,8 @@ public sealed class AkumaGamesController : ControllerBase
             }
 
             string directoryName = Path.GetFileName(fullPath);
-            int openBracket = directoryName.LastIndexOf('[', StringComparison.Ordinal);
-            int closeBracket = directoryName.LastIndexOf(']', StringComparison.Ordinal);
+            int openBracket = directoryName.LastIndexOf('[');
+            int closeBracket = directoryName.LastIndexOf(']');
             if (openBracket >= 0
                 && closeBracket > openBracket
                 && int.TryParse(directoryName[(openBracket + 1)..closeBracket], out int pathGameId)
