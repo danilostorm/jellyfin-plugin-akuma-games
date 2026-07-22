@@ -16,7 +16,7 @@ public sealed class AkumaGamesClient : IDisposable
     {
         _logger = logger;
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Jellyfin-AkumaGames", "0.1.0"));
+        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Jellyfin-AkumaGames", "0.2.0"));
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
@@ -48,6 +48,7 @@ public sealed class AkumaGamesClient : IDisposable
             {
                 itemsElement = root;
             }
+
             if (itemsElement is null)
             {
                 throw new InvalidOperationException("A API não retornou uma lista de games reconhecível.");
@@ -69,6 +70,7 @@ public sealed class AkumaGamesClient : IDisposable
             {
                 break;
             }
+
             offset += PageSize;
         }
 
@@ -105,13 +107,22 @@ public sealed class AkumaGamesClient : IDisposable
         string system = GetString(item, "systemTitle", "systemName") ?? string.Empty;
         if (TryGetProperty(item, "system", out JsonElement systemElement))
         {
-            system = systemElement.ValueKind == JsonValueKind.Object ? GetString(systemElement, "title", "name", "slug") ?? system : ElementToString(systemElement) ?? system;
+            system = systemElement.ValueKind == JsonValueKind.Object
+                ? GetString(systemElement, "title", "name", "slug") ?? system
+                : ElementToString(systemElement) ?? system;
         }
 
         string genre = GetString(item, "genreLabel", "genre") ?? string.Empty;
         if (TryGetProperty(item, "genres", out JsonElement genresElement) && genresElement.ValueKind == JsonValueKind.Array)
         {
-            genre = string.Join(" / ", genresElement.EnumerateArray().Select(value => value.ValueKind == JsonValueKind.Object ? GetString(value, "label", "title", "name") : ElementToString(value)).Where(value => !string.IsNullOrWhiteSpace(value)));
+            genre = string.Join(
+                " / ",
+                genresElement
+                    .EnumerateArray()
+                    .Select(value => value.ValueKind == JsonValueKind.Object
+                        ? GetString(value, "label", "title", "name")
+                        : ElementToString(value))
+                    .Where(value => !string.IsNullOrWhiteSpace(value)));
         }
 
         DateTimeOffset? createdAt = null;
@@ -139,15 +150,24 @@ public sealed class AkumaGamesClient : IDisposable
 
     private static JsonElement? FindArray(JsonElement element, params string[] names)
     {
-        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
         foreach (string name in names)
         {
-            if (TryGetProperty(element, name, out JsonElement value) && value.ValueKind == JsonValueKind.Array) return value;
+            if (TryGetProperty(element, name, out JsonElement value) && value.ValueKind == JsonValueKind.Array)
+            {
+                return value;
+            }
         }
+
         return null;
     }
 
-    private static JsonElement? GetObject(JsonElement element, string name) => TryGetProperty(element, name, out JsonElement value) && value.ValueKind == JsonValueKind.Object ? value : null;
+    private static JsonElement? GetObject(JsonElement element, string name)
+        => TryGetProperty(element, name, out JsonElement value) && value.ValueKind == JsonValueKind.Object ? value : null;
 
     private static int? GetInt(JsonElement element, params string[] names)
     {
@@ -159,10 +179,22 @@ public sealed class AkumaGamesClient : IDisposable
     {
         foreach (string name in names)
         {
-            if (!TryGetProperty(element, name, out JsonElement value)) continue;
-            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long number)) return number;
-            if (long.TryParse(ElementToString(value), NumberStyles.Integer, CultureInfo.InvariantCulture, out number)) return number;
+            if (!TryGetProperty(element, name, out JsonElement value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long number))
+            {
+                return number;
+            }
+
+            if (long.TryParse(ElementToString(value), NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
+            {
+                return number;
+            }
         }
+
         return null;
     }
 
@@ -173,9 +205,13 @@ public sealed class AkumaGamesClient : IDisposable
             if (TryGetProperty(element, name, out JsonElement value))
             {
                 string? text = ElementToString(value);
-                if (!string.IsNullOrWhiteSpace(text)) return text;
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text;
+                }
             }
         }
+
         return null;
     }
 
@@ -201,6 +237,7 @@ public sealed class AkumaGamesClient : IDisposable
                 }
             }
         }
+
         value = default;
         return false;
     }
