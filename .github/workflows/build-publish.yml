@@ -34,7 +34,7 @@ jobs:
 
       - name: Package plugin and persistent Unraid bridge
         run: |
-          VERSION='0.2.3.0'
+          VERSION='0.2.3.1'
           PLUGIN_ZIP="Jellyfin.Plugin.AkumaGames_${VERSION}.zip"
           BUNDLE_NAME="AkumaGames-v${VERSION}-Unraid"
 
@@ -48,31 +48,28 @@ jobs:
           mkdir -p "repository/${BUNDLE_NAME}/web" "repository/${BUNDLE_NAME}/unraid"
           cp Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll "repository/${BUNDLE_NAME}/"
           cp web/akuma-games-bridge.js "repository/${BUNDLE_NAME}/web/"
-          cp unraid/install-akuma-games-v0.2.3.sh "repository/${BUNDLE_NAME}/unraid/"
-          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.sh"
+          cp unraid/install-akuma-games-v0.2.3.1.sh "repository/${BUNDLE_NAME}/unraid/"
+          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.1.sh"
           cat > "repository/${BUNDLE_NAME}/LEIA-ME.txt" <<'TXT'
-          AKUMA GAMES v0.2.3.0 - UNRAID / JELLYFIN 10.11.11
+          AKUMA GAMES v0.2.3.1 - UNRAID / JELLYFIN 10.11.11
 
-          Esta versão instala o Persistent Web Bridge. A ponte fica salva em /config e
-          é reaplicada automaticamente em toda inicialização do container LinuxServer.
-
-          Quando um game é aberto pela biblioteca Games, o bridge identifica o item,
-          consulta o PlayerUrl do plugin e abre o game HTML5 automaticamente. O player
-          de vídeo e o visualizador de capas do Jellyfin não são usados.
+          Esta revisão corrige instalações em que custom-cont-init.d não é executado pelo
+          container. O instalador detecta automaticamente o volume /config, grava a ponte
+          persistente e também aplica o bridge diretamente no Jellyfin Web.
 
           INSTALAÇÃO
           1. Extraia este ZIP em uma pasta do Unraid.
           2. Abra o terminal nessa pasta.
           3. Execute:
-             bash unraid/install-akuma-games-v0.2.3.sh
+             bash unraid/install-akuma-games-v0.2.3.1.sh
           4. Sincronize o catálogo Akuma Games.
-          5. No navegador, limpe os dados do site ou abra em janela anônima para testar.
+          5. Limpe os dados do site ou teste em janela anônima.
 
           TESTE DA PONTE
           Abra o console do navegador e execute:
              AkumaGamesBridge.status()
 
-          Deve retornar version: "0.2.3" e loaded: true.
+          Deve retornar loaded: true e version: "0.2.3".
           TXT
           cd repository
           zip -9 -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}"
@@ -93,7 +90,7 @@ jobs:
               "versions": [
                 {
                   "checksum": "${CHECKSUM}",
-                  "changelog": "Instala uma ponte persistente no container, detecta automaticamente itens da biblioteca Games e abre o PlayerUrl HTML5.",
+                  "changelog": "Corrige a instalação do bridge no Unraid aplicando-o imediatamente e detectando automaticamente o volume /config.",
                   "targetAbi": "10.11.11.0",
                   "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/${PLUGIN_ZIP}",
                   "timestamp": "${TIMESTAMP}",
@@ -107,10 +104,10 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Akuma-Games-v0.2.3.0
+          name: Akuma-Games-v0.2.3.1
           path: |
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.0.zip
-            repository/AkumaGames-v0.2.3.0-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.1.zip
+            repository/AkumaGames-v0.2.3.1-Unraid.zip
             repository/manifest.json
 
       - name: Publish repository files
@@ -120,11 +117,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             repository/manifest.json \
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.0.zip \
-            repository/AkumaGames-v0.2.3.0-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.1.zip \
+            repository/AkumaGames-v0.2.3.1-Unraid.zip
           if git diff --cached --quiet; then
             echo "No changes to publish"
             exit 0
           fi
-          git commit -m "build: publish Akuma Games plugin v0.2.3.0"
+          git commit -m "build: publish Akuma Games plugin v0.2.3.1"
           git push
