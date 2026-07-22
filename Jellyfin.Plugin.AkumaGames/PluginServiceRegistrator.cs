@@ -11,6 +11,7 @@ public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<AkumaGamesClient>();
+        serviceCollection.AddSingleton<GameCatalogStore>();
         serviceCollection.AddSingleton<GameLibrarySyncService>();
         serviceCollection.AddHostedService<AkumaGamesStartupService>();
     }
