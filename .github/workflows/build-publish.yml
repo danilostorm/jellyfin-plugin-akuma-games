@@ -35,10 +35,10 @@ jobs:
           mkdir -p repository/package
           cp Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll repository/package/
           cd repository/package
-          zip -9 ../Jellyfin.Plugin.AkumaGames_0.1.0.0.zip Jellyfin.Plugin.AkumaGames.dll
+          zip -9 ../Jellyfin.Plugin.AkumaGames_0.2.0.0.zip Jellyfin.Plugin.AkumaGames.dll
           cd ../..
           rm -rf repository/package
-          CHECKSUM=$(md5sum repository/Jellyfin.Plugin.AkumaGames_0.1.0.0.zip | awk '{print $1}')
+          CHECKSUM=$(md5sum repository/Jellyfin.Plugin.AkumaGames_0.2.0.0.zip | awk '{print $1}')
           TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S')
           cat > repository/manifest.json <<JSON
           [
@@ -46,17 +46,17 @@ jobs:
               "category": "General",
               "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
               "name": "Akuma Games",
-              "description": "Sincroniza o catálogo Akumanimes como uma biblioteca nativa do Jellyfin.",
+              "description": "Catálogo de games no Jellyfin sem usar o player de vídeo.",
               "owner": "danilostorm",
-              "overview": "Games nativos no Jellyfin, Android TV e Fire TV",
+              "overview": "Página própria de Games, API autenticada e execução HTML5",
               "versions": [
                 {
                   "checksum": "${CHECKSUM}",
-                  "changelog": "Primeira versão com biblioteca nativa Games, capas e metadados.",
+                  "changelog": "Remove itens .strm, impede reprodução como vídeo e adiciona página própria Games no Jellyfin Web.",
                   "targetAbi": "10.11.11.0",
-                  "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/Jellyfin.Plugin.AkumaGames_0.1.0.0.zip",
+                  "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/Jellyfin.Plugin.AkumaGames_0.2.0.0.zip",
                   "timestamp": "${TIMESTAMP}",
-                  "version": "0.1.0.0"
+                  "version": "0.2.0.0"
                 }
               ]
             }
@@ -66,18 +66,18 @@ jobs:
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Jellyfin.Plugin.AkumaGames_0.1.0.0
-          path: repository/Jellyfin.Plugin.AkumaGames_0.1.0.0.zip
+          name: Jellyfin.Plugin.AkumaGames_0.2.0.0
+          path: repository/Jellyfin.Plugin.AkumaGames_0.2.0.0.zip
 
       - name: Publish repository files
         if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add repository/manifest.json repository/Jellyfin.Plugin.AkumaGames_0.1.0.0.zip
+          git add repository/manifest.json repository/Jellyfin.Plugin.AkumaGames_0.2.0.0.zip
           if git diff --cached --quiet; then
             echo "No changes to publish"
             exit 0
           fi
-          git commit -m "build: publish Akuma Games plugin v0.1.0.0"
+          git commit -m "build: publish Akuma Games plugin v0.2.0.0"
           git push
