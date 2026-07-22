@@ -5,10 +5,11 @@ on:
     branches: [main]
     paths:
       - 'Jellyfin.Plugin.AkumaGames/**'
+      - 'web/**'
+      - 'unraid/**'
       - '.github/workflows/build-publish.yml'
-  pull_request_target:
+  pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -16,13 +17,10 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source branch
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
@@ -34,15 +32,48 @@ jobs:
           dotnet restore Jellyfin.Plugin.AkumaGames/Jellyfin.Plugin.AkumaGames.csproj
           dotnet build Jellyfin.Plugin.AkumaGames/Jellyfin.Plugin.AkumaGames.csproj -c Release --no-restore
 
-      - name: Package plugin
+      - name: Package plugin and Unraid installer
         run: |
+          VERSION='0.2.2.0'
+          PLUGIN_ZIP="Jellyfin.Plugin.AkumaGames_${VERSION}.zip"
+          BUNDLE_NAME="AkumaGames-v${VERSION}-Unraid"
+
           mkdir -p repository/package
           cp Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll repository/package/
           cd repository/package
-          zip -9 ../Jellyfin.Plugin.AkumaGames_0.2.1.0.zip Jellyfin.Plugin.AkumaGames.dll
+          zip -9 "../${PLUGIN_ZIP}" Jellyfin.Plugin.AkumaGames.dll
           cd ../..
           rm -rf repository/package
-          CHECKSUM=$(md5sum repository/Jellyfin.Plugin.AkumaGames_0.2.1.0.zip | awk '{print $1}')
+
+          mkdir -p "repository/${BUNDLE_NAME}/web" "repository/${BUNDLE_NAME}/unraid"
+          cp Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll "repository/${BUNDLE_NAME}/"
+          cp web/akuma-games-bridge.js "repository/${BUNDLE_NAME}/web/"
+          cp unraid/install-akuma-games-v0.2.2.sh "repository/${BUNDLE_NAME}/unraid/"
+          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.2.sh"
+          cat > "repository/${BUNDLE_NAME}/LEIA-ME.txt" <<'TXT'
+          AKUMA GAMES v0.2.2.0 - UNRAID / JELLYFIN 10.11.11
+
+          Esta versão mantém a biblioteca Games na página inicial e transforma o botão
+          Reproduzir em Jogar no Jellyfin Web. O game HTML5 abre em uma tela interna,
+          sem FFmpeg, HLS ou visualizador de fotos.
+
+          INSTALAÇÃO
+          1. Extraia este ZIP em uma pasta do Unraid.
+          2. Abra o terminal nessa pasta.
+          3. Execute:
+             bash unraid/install-akuma-games-v0.2.2.sh
+          4. Sincronize o Akuma Games no painel do Jellyfin.
+          5. Pressione Ctrl+F5 no navegador.
+
+          O launcher web precisa ser reaplicado se o container Jellyfin for recriado ou
+          atualizado, pois /usr/share/jellyfin/web pertence à imagem do container.
+          TXT
+          cd repository
+          zip -9 -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}"
+          rm -rf "${BUNDLE_NAME}"
+          cd ..
+
+          CHECKSUM=$(md5sum "repository/${PLUGIN_ZIP}" | awk '{print $1}')
           TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S')
           cat > repository/manifest.json <<JSON
           [
@@ -50,39 +81,44 @@ jobs:
               "category": "General",
               "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
               "name": "Akuma Games",
-              "description": "Cria uma biblioteca nativa de games na página inicial sem usar o player de vídeo.",
+              "description": "Biblioteca nativa com launcher HTML5 no Jellyfin Web.",
               "owner": "danilostorm",
-              "overview": "Biblioteca Games para Jellyfin Web, Android TV e Fire TV",
+              "overview": "Games na página inicial sem player de vídeo ou visualizador de fotos",
               "versions": [
                 {
                   "checksum": "${CHECKSUM}",
-                  "changelog": "Restaura a biblioteca Games na página inicial para usuários comuns, mantém capas e pastas nativas e remove qualquer reprodução por FFmpeg/HLS.",
+                  "changelog": "Resolve itens da biblioteca Games e substitui Reproduzir por Jogar no Jellyfin Web.",
                   "targetAbi": "10.11.11.0",
-                  "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/Jellyfin.Plugin.AkumaGames_0.2.1.0.zip",
+                  "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/${PLUGIN_ZIP}",
                   "timestamp": "${TIMESTAMP}",
-                  "version": "0.2.1.0"
+                  "version": "${VERSION}"
                 }
               ]
             }
           ]
           JSON
 
-      - name: Upload plugin artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Jellyfin.Plugin.AkumaGames_0.2.1.0
-          path: repository/Jellyfin.Plugin.AkumaGames_0.2.1.0.zip
+          name: Akuma-Games-v0.2.2.0
+          path: |
+            repository/Jellyfin.Plugin.AkumaGames_0.2.2.0.zip
+            repository/AkumaGames-v0.2.2.0-Unraid.zip
+            repository/manifest.json
 
-      - name: Publish repository files to source branch
-        env:
-          TARGET_BRANCH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref_name }}
+      - name: Publish repository files
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add repository/manifest.json repository/Jellyfin.Plugin.AkumaGames_0.2.1.0.zip
+          git add \
+            repository/manifest.json \
+            repository/Jellyfin.Plugin.AkumaGames_0.2.2.0.zip \
+            repository/AkumaGames-v0.2.2.0-Unraid.zip
           if git diff --cached --quiet; then
             echo "No changes to publish"
             exit 0
           fi
-          git commit -m "build: publish Akuma Games plugin v0.2.1.0"
-          git push origin HEAD:"${TARGET_BRANCH}"
+          git commit -m "build: publish Akuma Games plugin v0.2.2.0"
+          git push
