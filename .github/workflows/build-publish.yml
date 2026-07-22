@@ -30,7 +30,9 @@ jobs:
       - name: Validate web bridge syntax
         run: |
           node --check web/akuma-games-bridge.js
+          node --check web/akuma-games-fast-root.js
           node --check web/akuma-games-card-click.js
+          bash -n unraid/install-akuma-games-v0.2.3.7.sh
 
       - name: Build plugin
         run: |
@@ -39,7 +41,7 @@ jobs:
 
       - name: Package plugin and persistent Unraid bridge
         run: |
-          VERSION='0.2.3.6'
+          VERSION='0.2.3.7'
           PLUGIN_ZIP="Jellyfin.Plugin.AkumaGames_${VERSION}.zip"
           BUNDLE_NAME="AkumaGames-v${VERSION}-Unraid"
 
@@ -53,36 +55,36 @@ jobs:
           mkdir -p "repository/${BUNDLE_NAME}/web" "repository/${BUNDLE_NAME}/unraid"
           cp Jellyfin.Plugin.AkumaGames/bin/Release/net9.0/Jellyfin.Plugin.AkumaGames.dll "repository/${BUNDLE_NAME}/"
           cp web/akuma-games-bridge.js "repository/${BUNDLE_NAME}/web/"
+          cp web/akuma-games-fast-root.js "repository/${BUNDLE_NAME}/web/"
           cp web/akuma-games-card-click.js "repository/${BUNDLE_NAME}/web/"
-          cp unraid/install-akuma-games-v0.2.3.6.sh "repository/${BUNDLE_NAME}/unraid/"
-          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.6.sh"
+          cp unraid/install-akuma-games-v0.2.3.7.sh "repository/${BUNDLE_NAME}/unraid/"
+          chmod +x "repository/${BUNDLE_NAME}/unraid/install-akuma-games-v0.2.3.7.sh"
           cat > "repository/${BUNDLE_NAME}/LEIA-ME.txt" <<'TXT'
-          AKUMA GAMES v0.2.3.6 - UNRAID / JELLYFIN 10.11.11
+          AKUMA GAMES v0.2.3.7 - UNRAID / JELLYFIN 10.11.11
 
-          CORREÇÃO DE DESEMPENHO DA RAIZ GAMES
+          CORREÇÃO REAL DO LOADING NA RAIZ GAMES
 
-          O problema não era o clique na biblioteca. O Jellyfin entrava na rota, mas
-          ficava no loading enquanto procurava imagens herdadas e processava os milhares
-          de diretórios para exibir apenas Arcade, NES, PlayStation etc.
+          A versão anterior esperava a rota /list começar e validava o parentId como se
+          ele fosse a pasta física. No Jellyfin Web, esse ID é normalmente uma UserView
+          sem Path, então o endpoint rápido retornava 404 e a listagem nativa lenta seguia.
 
-          Esta versão usa duas otimizações:
-          1. A raiz Games é desenhada imediatamente pelo cache leve do plugin.
-          2. A sincronização cria folder.jpg local em cada sistema para acelerar também
-             clientes nativos, como Android TV e Fire TV.
+          Nesta versão:
+          1. As sete categorias são pré-carregadas logo após o login.
+          2. O clique em Games é interceptado antes de iniciar a listagem nativa.
+          3. A tela rápida é pintada primeiro e fica em cache local por 24 horas.
+          4. UserView, pasta física e acesso direto à rota são reconhecidos.
 
           INSTALAÇÃO
-          1. Extraia este ZIP em uma pasta do Unraid.
-          2. Abra o terminal nessa pasta.
+          1. Extraia este ZIP no Unraid.
+          2. Abra o terminal na pasta extraída.
           3. Execute:
-             bash unraid/install-akuma-games-v0.2.3.6.sh
-          4. No Jellyfin, execute uma vez a tarefa Sincronizar catálogo de games.
-          5. Use Ctrl+Shift+R ou limpe os dados do site.
+             bash unraid/install-akuma-games-v0.2.3.7.sh
+          4. Feche todas as abas do Jellyfin e teste em janela anônima.
 
-          TESTE
-          Ao clicar na biblioteca Games, as categorias devem aparecer quase de imediato.
-          No console do navegador execute:
-             AkumaGamesCardClickBridge
-          O campo version deve mostrar 0.2.3.6.
+          DIAGNÓSTICO NO CONSOLE
+             AkumaGamesFastRootBridge.status()
+
+          O resultado deve mostrar version 0.2.3.7, cached true e lastError vazio.
           TXT
           cd repository
           zip -9 -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}"
@@ -97,13 +99,13 @@ jobs:
               "category": "General",
               "guid": "0fe9988e-21a1-4e59-aed7-4cf2e3858143",
               "name": "Akuma Games",
-              "description": "Biblioteca nativa com cache rápido e launcher HTML5.",
+              "description": "Biblioteca nativa com raiz pré-carregada e launcher HTML5.",
               "owner": "danilostorm",
-              "overview": "Raiz Games instantânea, categorias locais e games HTML5",
+              "overview": "Categorias instantâneas antes da listagem nativa",
               "versions": [
                 {
                   "checksum": "${CHECKSUM}",
-                  "changelog": "Remove o loading longo da raiz Games usando cache do plugin e capas locais por sistema.",
+                  "changelog": "Pré-carrega as categorias, reconhece a UserView Games e intercepta o clique antes da rota nativa lenta.",
                   "targetAbi": "10.11.11.0",
                   "sourceUrl": "https://raw.githubusercontent.com/danilostorm/jellyfin-plugin-akuma-games/main/repository/${PLUGIN_ZIP}",
                   "timestamp": "${TIMESTAMP}",
@@ -117,10 +119,10 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Akuma-Games-v0.2.3.6
+          name: Akuma-Games-v0.2.3.7
           path: |
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.6.zip
-            repository/AkumaGames-v0.2.3.6-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.7.zip
+            repository/AkumaGames-v0.2.3.7-Unraid.zip
             repository/manifest.json
 
       - name: Publish repository files
@@ -130,11 +132,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             repository/manifest.json \
-            repository/Jellyfin.Plugin.AkumaGames_0.2.3.6.zip \
-            repository/AkumaGames-v0.2.3.6-Unraid.zip
+            repository/Jellyfin.Plugin.AkumaGames_0.2.3.7.zip \
+            repository/AkumaGames-v0.2.3.7-Unraid.zip
           if git diff --cached --quiet; then
             echo "No changes to publish"
             exit 0
           fi
-          git commit -m "build: publish Akuma Games plugin v0.2.3.6"
+          git commit -m "build: publish Akuma Games plugin v0.2.3.7"
           git push
