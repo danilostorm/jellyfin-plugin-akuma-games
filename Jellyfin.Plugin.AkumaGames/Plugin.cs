@@ -18,7 +18,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     public override string Name => "Akuma Games";
-    public override string Description => "Sincroniza o catálogo Akumanimes e abre os games em uma página própria, sem usar o player de vídeo.";
+    public override string Description => "Cria uma biblioteca nativa de games na página inicial do Jellyfin sem usar o player de vídeo.";
     public override Guid Id => PluginId;
     public static Plugin? Instance { get; private set; }
 
