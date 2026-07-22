@@ -7,6 +7,8 @@ namespace Jellyfin.Plugin.AkumaGames.Services;
 
 /// <summary>
 /// Persiste o catálogo de games fora da biblioteca de mídia do Jellyfin.
+/// Mantém também uma cópia em memória para que a navegação não precise
+/// desserializar os 2 mil+ games a cada abertura da biblioteca.
 /// </summary>
 public sealed class GameCatalogStore
 {
@@ -18,6 +20,7 @@ public sealed class GameCatalogStore
     private readonly IApplicationPaths _applicationPaths;
     private readonly ILogger<GameCatalogStore> _logger;
     private readonly SemaphoreSlim _catalogLock = new(1, 1);
+    private AkumaGame[]? _memoryCache;
 
     public GameCatalogStore(
         IApplicationPaths applicationPaths,
@@ -34,6 +37,8 @@ public sealed class GameCatalogStore
     public async Task SaveAsync(IReadOnlyList<AkumaGame> games, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(games);
+        AkumaGame[] snapshot = games.ToArray();
+
         await _catalogLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -47,11 +52,12 @@ public sealed class GameCatalogStore
                 81920,
                 true))
             {
-                await JsonSerializer.SerializeAsync(stream, games, JsonOptions, cancellationToken).ConfigureAwait(false);
+                await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken).ConfigureAwait(false);
             }
 
             File.Move(temporaryPath, CatalogPath, true);
-            _logger.LogInformation("Akuma Games: catálogo persistido com {Count} games.", games.Count);
+            Volatile.Write(ref _memoryCache, snapshot);
+            _logger.LogInformation("Akuma Games: catálogo persistido com {Count} games.", snapshot.Length);
         }
         finally
         {
@@ -61,9 +67,21 @@ public sealed class GameCatalogStore
 
     public async Task<IReadOnlyList<AkumaGame>> LoadAsync(CancellationToken cancellationToken)
     {
+        AkumaGame[]? cached = Volatile.Read(ref _memoryCache);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         await _catalogLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cached = Volatile.Read(ref _memoryCache);
+            if (cached is not null)
+            {
+                return cached;
+            }
+
             if (!File.Exists(CatalogPath))
             {
                 return Array.Empty<AkumaGame>();
@@ -77,11 +95,13 @@ public sealed class GameCatalogStore
                 81920,
                 true);
 
-            IReadOnlyList<AkumaGame>? games = await JsonSerializer
+            AkumaGame[]? games = await JsonSerializer
                 .DeserializeAsync<AkumaGame[]>(stream, JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
 
-            return games ?? Array.Empty<AkumaGame>();
+            games ??= Array.Empty<AkumaGame>();
+            Volatile.Write(ref _memoryCache, games);
+            return games;
         }
         catch (JsonException ex)
         {
