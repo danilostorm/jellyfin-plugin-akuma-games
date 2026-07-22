@@ -2,6 +2,7 @@ using System.Net.Mime;
 using Jellyfin.Plugin.AkumaGames.Models;
 using Jellyfin.Plugin.AkumaGames.Services;
 using MediaBrowser.Common.Api;
+using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,15 +17,18 @@ public sealed class AkumaGamesController : ControllerBase
     private readonly AkumaGamesClient _client;
     private readonly GameCatalogStore _catalogStore;
     private readonly GameLibrarySyncService _syncService;
+    private readonly ILibraryManager _libraryManager;
 
     public AkumaGamesController(
         AkumaGamesClient client,
         GameCatalogStore catalogStore,
-        GameLibrarySyncService syncService)
+        GameLibrarySyncService syncService,
+        ILibraryManager libraryManager)
     {
         _client = client;
         _catalogStore = catalogStore;
         _syncService = syncService;
+        _libraryManager = libraryManager;
     }
 
     [HttpGet("Catalog")]
@@ -69,6 +73,45 @@ public sealed class AkumaGamesController : ControllerBase
         int id,
         CancellationToken cancellationToken)
     {
+        return await BuildLaunchResponseAsync(id, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resolve um item da biblioteca nativa para o game correspondente.
+    /// Isso permite que o Jellyfin Web troque o player de foto/vídeo pelo launcher HTML5.
+    /// </summary>
+    [HttpGet("ResolveItem/{itemId:guid}")]
+    public async Task<ActionResult<GameLaunchResponse>> ResolveLibraryItem(
+        Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        int? gameId = TryResolveGameId(item.Path, item.ProviderIds);
+        if (!gameId.HasValue)
+        {
+            return NotFound();
+        }
+
+        return await BuildLaunchResponseAsync(gameId.Value, cancellationToken).ConfigureAwait(false);
+    }
+
+    [HttpPost("Sync")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public async Task<ActionResult<GameSyncResponse>> Sync(CancellationToken cancellationToken)
+    {
+        int count = await _syncService.SyncAsync(null, cancellationToken).ConfigureAwait(false);
+        return Ok(new GameSyncResponse(count, "Catálogo sincronizado sem criar vídeos no Jellyfin."));
+    }
+
+    private async Task<ActionResult<GameLaunchResponse>> BuildLaunchResponseAsync(
+        int id,
+        CancellationToken cancellationToken)
+    {
         AkumaGame? game = await FindGameAsync(id, cancellationToken).ConfigureAwait(false);
         if (game is null)
         {
@@ -85,12 +128,108 @@ public sealed class AkumaGamesController : ControllerBase
         return Ok(new GameLaunchResponse(game.Id, game.Title, playerUri.AbsoluteUri));
     }
 
-    [HttpPost("Sync")]
-    [Authorize(Policy = Policies.RequiresElevation)]
-    public async Task<ActionResult<GameSyncResponse>> Sync(CancellationToken cancellationToken)
+    private int? TryResolveGameId(
+        string? itemPath,
+        IReadOnlyDictionary<string, string>? providerIds)
     {
-        int count = await _syncService.SyncAsync(null, cancellationToken).ConfigureAwait(false);
-        return Ok(new GameSyncResponse(count, "Catálogo sincronizado sem criar vídeos no Jellyfin."));
+        if (providerIds is not null)
+        {
+            foreach (KeyValuePair<string, string> provider in providerIds)
+            {
+                if (string.Equals(provider.Key, "akumagames", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(provider.Value, out int providerGameId)
+                    && providerGameId > 0)
+                {
+                    return providerGameId;
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(itemPath))
+        {
+            return null;
+        }
+
+        string libraryRoot;
+        try
+        {
+            libraryRoot = Path.GetFullPath(_syncService.LibraryPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        string? currentPath = itemPath;
+        if (!Directory.Exists(currentPath))
+        {
+            currentPath = Path.GetDirectoryName(currentPath);
+        }
+
+        for (int depth = 0; depth < 8 && !string.IsNullOrWhiteSpace(currentPath); depth++)
+        {
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(currentPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                break;
+            }
+
+            bool isInsideLibrary = string.Equals(fullPath, libraryRoot, StringComparison.OrdinalIgnoreCase)
+                || fullPath.StartsWith(
+                    libraryRoot + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase)
+                || fullPath.StartsWith(
+                    libraryRoot + Path.AltDirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (!isInsideLibrary)
+            {
+                break;
+            }
+
+            string markerPath = Path.Combine(fullPath, ".akuma-game");
+            if (System.IO.File.Exists(markerPath))
+            {
+                try
+                {
+                    string marker = System.IO.File.ReadAllText(markerPath).Trim();
+                    if (int.TryParse(marker, out int markerGameId) && markerGameId > 0)
+                    {
+                        return markerGameId;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return null;
+                }
+            }
+
+            string directoryName = Path.GetFileName(fullPath);
+            int openBracket = directoryName.LastIndexOf('[', StringComparison.Ordinal);
+            int closeBracket = directoryName.LastIndexOf(']', StringComparison.Ordinal);
+            if (openBracket >= 0
+                && closeBracket > openBracket
+                && int.TryParse(directoryName[(openBracket + 1)..closeBracket], out int pathGameId)
+                && pathGameId > 0)
+            {
+                return pathGameId;
+            }
+
+            if (string.Equals(fullPath, libraryRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
+            currentPath = Path.GetDirectoryName(fullPath);
+        }
+
+        return null;
     }
 
     private async Task<AkumaGame?> FindGameAsync(int id, CancellationToken cancellationToken)
