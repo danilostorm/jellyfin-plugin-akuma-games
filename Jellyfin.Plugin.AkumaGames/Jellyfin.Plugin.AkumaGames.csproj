@@ -3,7 +3,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.AkumaGames</RootNamespace>
     <AssemblyName>Jellyfin.Plugin.AkumaGames</AssemblyName>
-    <Version>0.1.0.0</Version>
+    <Version>0.2.0.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -12,9 +12,12 @@
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="10.11.11"><ExcludeAssets>runtime</ExcludeAssets></PackageReference>
     <PackageReference Include="Jellyfin.Model" Version="10.11.11"><ExcludeAssets>runtime</ExcludeAssets></PackageReference>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <None Remove="Configuration/configPage.html" />
+    <None Remove="Pages/catalogPage.html" />
     <EmbeddedResource Include="Configuration/configPage.html" />
+    <EmbeddedResource Include="Pages/catalogPage.html" />
   </ItemGroup>
 </Project>
