@@ -1,0 +1,257 @@
+<div id="AkumaGamesCatalogPage" data-role="page" class="page type-interior mainAnimatedPage akumaGamesPage" data-title="Games">
+  <style>
+    .akumaGamesPage { overflow-y: auto; }
+    .akumaGamesShell { padding: 2.2em 3.2%; max-width: 1800px; margin: 0 auto; }
+    .akumaGamesHero { display: flex; align-items: center; justify-content: space-between; gap: 1.5em; margin-bottom: 1.5em; }
+    .akumaGamesTitleWrap { display: flex; align-items: center; gap: 1em; min-width: 0; }
+    .akumaGamesIcon { width: 3.2em; height: 3.2em; border-radius: 1em; display: grid; place-items: center; background: rgba(0,164,220,.18); font-size: 1.4em; }
+    .akumaGamesHero h1 { margin: 0; font-size: 2.1em; line-height: 1.05; }
+    .akumaGamesHero p { margin: .45em 0 0; opacity: .72; }
+    .akumaGamesStats { display: flex; gap: .7em; flex-wrap: wrap; justify-content: flex-end; }
+    .akumaGamesPill { padding: .72em 1em; border-radius: .7em; background: rgba(255,255,255,.08); white-space: nowrap; }
+    .akumaGamesToolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(180px, .34fr) minmax(180px, .34fr) auto; gap: .8em; margin-bottom: 1.8em; }
+    .akumaGamesToolbar input, .akumaGamesToolbar select { width: 100%; box-sizing: border-box; min-height: 3.1em; border: 0; border-radius: .65em; padding: 0 1em; background: rgba(255,255,255,.1); color: inherit; }
+    .akumaGamesToolbar select option { color: #111; }
+    .akumaGamesRefresh { min-height: 3.1em; border: 0; border-radius: .65em; padding: 0 1.2em; cursor: pointer; }
+    .akumaGamesStatus { min-height: 2em; margin: -.7em 0 1em; opacity: .75; }
+    .akumaGamesGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1.15em; }
+    .akumaGameCard { min-width: 0; border-radius: .85em; overflow: hidden; background: rgba(255,255,255,.065); box-shadow: 0 .35em 1.2em rgba(0,0,0,.18); transition: transform .16s ease, background .16s ease; }
+    .akumaGameCard:focus-within, .akumaGameCard:hover { transform: translateY(-.25em); background: rgba(255,255,255,.1); }
+    .akumaGamePoster { aspect-ratio: 3 / 4; width: 100%; object-fit: cover; display: block; background: rgba(255,255,255,.06); }
+    .akumaGameBody { padding: .85em; }
+    .akumaGameTitle { font-size: 1.02em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: .45em; }
+    .akumaGameMeta { font-size: .82em; opacity: .68; min-height: 2.4em; line-height: 1.35; }
+    .akumaGamePlay { width: 100%; margin-top: .8em; min-height: 2.75em; border: 0; border-radius: .55em; cursor: pointer; font-weight: 600; }
+    .akumaGamesMoreWrap { display: flex; justify-content: center; padding: 1.8em 0 3em; }
+    .akumaGamesMore { min-width: 12em; min-height: 3em; border: 0; border-radius: .7em; cursor: pointer; }
+    .akumaGamesEmpty { grid-column: 1 / -1; text-align: center; padding: 5em 1em; opacity: .72; }
+    .akumaGameOverlay { position: fixed; inset: 0; z-index: 99999; display: none; flex-direction: column; background: #080808; }
+    .akumaGameOverlay.open { display: flex; }
+    .akumaGameOverlayBar { min-height: 3.7em; display: flex; align-items: center; gap: .8em; padding: 0 .8em; background: #171717; }
+    .akumaGameOverlayTitle { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+    .akumaGameOverlayButton { min-height: 2.6em; border: 0; border-radius: .55em; padding: 0 1em; cursor: pointer; }
+    .akumaGameFrame { border: 0; width: 100%; flex: 1; background: #000; }
+    @media (max-width: 900px) {
+      .akumaGamesShell { padding: 1.4em 3.5%; }
+      .akumaGamesHero { align-items: flex-start; flex-direction: column; }
+      .akumaGamesStats { justify-content: flex-start; }
+      .akumaGamesToolbar { grid-template-columns: 1fr 1fr; }
+      .akumaGamesToolbar input { grid-column: 1 / -1; }
+    }
+    @media (max-width: 560px) {
+      .akumaGamesHero h1 { font-size: 1.65em; }
+      .akumaGamesToolbar { grid-template-columns: 1fr; }
+      .akumaGamesToolbar input { grid-column: auto; }
+      .akumaGamesGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75em; }
+      .akumaGameBody { padding: .7em; }
+      .akumaGameOverlayBar { flex-wrap: wrap; padding: .5em; }
+      .akumaGameOverlayTitle { flex-basis: 100%; }
+    }
+  </style>
+
+  <div class="akumaGamesShell">
+    <header class="akumaGamesHero">
+      <div class="akumaGamesTitleWrap">
+        <div class="akumaGamesIcon" aria-hidden="true">🎮</div>
+        <div>
+          <h1>Games</h1>
+          <p>Escolha um game e jogue dentro do Jellyfin sem usar o player de vídeo.</p>
+        </div>
+      </div>
+      <div class="akumaGamesStats">
+        <div class="akumaGamesPill"><strong id="AkumaGamesCount">0</strong> games</div>
+        <div class="akumaGamesPill"><strong id="AkumaGamesVisible">0</strong> exibidos</div>
+      </div>
+    </header>
+
+    <section class="akumaGamesToolbar" aria-label="Filtros do catálogo">
+      <input id="AkumaGamesSearch" type="search" placeholder="Buscar um game..." autocomplete="off" />
+      <select id="AkumaGamesSystem" aria-label="Sistema"><option value="">Todos os sistemas</option></select>
+      <select id="AkumaGamesGenre" aria-label="Gênero"><option value="">Todos os gêneros</option></select>
+      <button id="AkumaGamesRefresh" class="raised button-submit akumaGamesRefresh" type="button">Atualizar</button>
+    </section>
+
+    <div id="AkumaGamesStatus" class="akumaGamesStatus" role="status"></div>
+    <main id="AkumaGamesGrid" class="akumaGamesGrid"></main>
+    <div class="akumaGamesMoreWrap"><button id="AkumaGamesMore" class="raised akumaGamesMore" type="button" hidden>Carregar mais</button></div>
+  </div>
+
+  <div id="AkumaGameOverlay" class="akumaGameOverlay" role="dialog" aria-modal="true" aria-label="Executando game">
+    <div class="akumaGameOverlayBar">
+      <div id="AkumaGameOverlayTitle" class="akumaGameOverlayTitle">Game</div>
+      <button id="AkumaGameNewWindow" class="akumaGameOverlayButton" type="button">Abrir em nova tela</button>
+      <button id="AkumaGameClose" class="akumaGameOverlayButton" type="button">Fechar</button>
+    </div>
+    <iframe id="AkumaGameFrame" class="akumaGameFrame" allow="autoplay; fullscreen; gamepad; clipboard-read; clipboard-write" allowfullscreen></iframe>
+  </div>
+
+  <script type="text/javascript">
+    (function () {
+      const page = document.querySelector('#AkumaGamesCatalogPage');
+      if (!page || page.dataset.akumaInitialized === '1') return;
+      page.dataset.akumaInitialized = '1';
+
+      const pageSize = 96;
+      let allGames = [];
+      let filteredGames = [];
+      let renderedCount = 0;
+      let activeGameUrl = '';
+
+      const el = (selector) => page.querySelector(selector);
+      const grid = el('#AkumaGamesGrid');
+      const status = el('#AkumaGamesStatus');
+      const search = el('#AkumaGamesSearch');
+      const system = el('#AkumaGamesSystem');
+      const genre = el('#AkumaGamesGenre');
+      const count = el('#AkumaGamesCount');
+      const visible = el('#AkumaGamesVisible');
+      const more = el('#AkumaGamesMore');
+      const overlay = el('#AkumaGameOverlay');
+      const frame = el('#AkumaGameFrame');
+
+      function valueOf(object, camel, pascal) {
+        return object && object[camel] !== undefined ? object[camel] : object ? object[pascal] : undefined;
+      }
+
+      function escapeHtml(value) {
+        return String(value || '').replace(/[&<>'"]/g, function (character) {
+          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character];
+        });
+      }
+
+      async function apiGet(path) {
+        return ApiClient.ajax({
+          type: 'GET',
+          url: ApiClient.getUrl(path),
+          dataType: 'json'
+        });
+      }
+
+      function normalizeGame(item) {
+        return {
+          id: Number(valueOf(item, 'id', 'Id') || 0),
+          title: String(valueOf(item, 'title', 'Title') || 'Sem nome'),
+          imageUrl: String(valueOf(item, 'imageUrl', 'ImageUrl') || ''),
+          description: String(valueOf(item, 'description', 'Description') || ''),
+          system: String(valueOf(item, 'system', 'System') || 'Outros'),
+          genre: String(valueOf(item, 'genre', 'Genre') || ''),
+          players: String(valueOf(item, 'players', 'Players') || ''),
+          playCount: Number(valueOf(item, 'playCount', 'PlayCount') || 0)
+        };
+      }
+
+      function setOptions(select, values, firstLabel) {
+        const current = select.value;
+        const unique = Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        select.innerHTML = '<option value="">' + escapeHtml(firstLabel) + '</option>' + unique.map(function (item) {
+          return '<option value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</option>';
+        }).join('');
+        select.value = unique.includes(current) ? current : '';
+      }
+
+      function applyFilters() {
+        const query = search.value.trim().toLocaleLowerCase('pt-BR');
+        const selectedSystem = system.value;
+        const selectedGenre = genre.value;
+        filteredGames = allGames.filter(function (game) {
+          const searchable = (game.title + ' ' + game.system + ' ' + game.genre).toLocaleLowerCase('pt-BR');
+          return (!query || searchable.includes(query))
+            && (!selectedSystem || game.system === selectedSystem)
+            && (!selectedGenre || game.genre.split(' / ').includes(selectedGenre) || game.genre === selectedGenre);
+        });
+        renderedCount = 0;
+        grid.innerHTML = '';
+        renderNext();
+      }
+
+      function renderNext() {
+        const next = filteredGames.slice(renderedCount, renderedCount + pageSize);
+        if (!next.length && renderedCount === 0) {
+          grid.innerHTML = '<div class="akumaGamesEmpty">Nenhum game encontrado com esses filtros.</div>';
+        } else {
+          const html = next.map(function (game) {
+            const meta = [game.system, game.genre].filter(Boolean).join(' · ');
+            const image = game.imageUrl || 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#202020"/><text x="50%" y="50%" fill="#aaa" font-size="70" text-anchor="middle">🎮</text></svg>');
+            return '<article class="akumaGameCard">'
+              + '<img class="akumaGamePoster" loading="lazy" src="' + escapeHtml(image) + '" alt="Capa de ' + escapeHtml(game.title) + '" />'
+              + '<div class="akumaGameBody">'
+              + '<div class="akumaGameTitle" title="' + escapeHtml(game.title) + '">' + escapeHtml(game.title) + '</div>'
+              + '<div class="akumaGameMeta">' + escapeHtml(meta || 'Game') + '</div>'
+              + '<button class="raised button-submit akumaGamePlay" type="button" data-game-id="' + game.id + '">Jogar</button>'
+              + '</div></article>';
+          }).join('');
+          grid.insertAdjacentHTML('beforeend', html);
+        }
+
+        renderedCount += next.length;
+        count.textContent = String(allGames.length);
+        visible.textContent = String(filteredGames.length);
+        more.hidden = renderedCount >= filteredGames.length;
+      }
+
+      async function loadCatalog(forceRefresh) {
+        status.textContent = forceRefresh ? 'Atualizando catálogo...' : 'Carregando catálogo...';
+        grid.innerHTML = '';
+        more.hidden = true;
+        try {
+          const response = await apiGet('AkumaGames/Catalog' + (forceRefresh ? '?refresh=true' : ''));
+          const items = valueOf(response, 'items', 'Items') || [];
+          allGames = items.map(normalizeGame);
+          setOptions(system, allGames.map(game => game.system), 'Todos os sistemas');
+          const genres = allGames.flatMap(game => game.genre ? game.genre.split(' / ').map(item => item.trim()) : []);
+          setOptions(genre, genres, 'Todos os gêneros');
+          status.textContent = allGames.length ? 'Catálogo pronto.' : 'A API não retornou games.';
+          applyFilters();
+        } catch (error) {
+          console.error('Akuma Games:', error);
+          status.textContent = 'Não foi possível carregar o catálogo. Verifique o plugin e a URL da API.';
+          grid.innerHTML = '<div class="akumaGamesEmpty">Falha ao carregar os games.</div>';
+        }
+      }
+
+      async function launchGame(id) {
+        status.textContent = 'Preparando o game...';
+        try {
+          const response = await apiGet('AkumaGames/Games/' + encodeURIComponent(id) + '/Launch');
+          activeGameUrl = String(valueOf(response, 'playerUrl', 'PlayerUrl') || '');
+          const title = String(valueOf(response, 'title', 'Title') || 'Game');
+          if (!activeGameUrl) throw new Error('URL de execução vazia');
+          el('#AkumaGameOverlayTitle').textContent = title;
+          frame.src = activeGameUrl;
+          overlay.classList.add('open');
+          status.textContent = '';
+        } catch (error) {
+          console.error('Akuma Games:', error);
+          status.textContent = 'Não foi possível abrir este game.';
+        }
+      }
+
+      function closeGame() {
+        overlay.classList.remove('open');
+        frame.src = 'about:blank';
+        activeGameUrl = '';
+      }
+
+      grid.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-game-id]');
+        if (button) launchGame(button.dataset.gameId);
+      });
+      search.addEventListener('input', applyFilters);
+      system.addEventListener('change', applyFilters);
+      genre.addEventListener('change', applyFilters);
+      more.addEventListener('click', renderNext);
+      el('#AkumaGamesRefresh').addEventListener('click', function () { loadCatalog(true); });
+      el('#AkumaGameClose').addEventListener('click', closeGame);
+      el('#AkumaGameNewWindow').addEventListener('click', function () {
+        if (activeGameUrl) window.open(activeGameUrl, '_blank', 'noopener,noreferrer');
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && overlay.classList.contains('open')) closeGame();
+      });
+      page.addEventListener('pageshow', function () {
+        if (!allGames.length) loadCatalog(false);
+      });
+      page.addEventListener('pagehide', closeGame);
+    })();
+  </script>
+</div>
