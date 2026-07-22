@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <title>Akuma Games TV</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #090a0c;
+            --panel: #15171b;
+            --panel-2: #202329;
+            --text: #f3f5f7;
+            --muted: #aeb5bf;
+            --accent: #00a4dc;
+            --focus: #78ddff;
+        }
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--text); font-family: Arial, Helvetica, sans-serif; }
+        button, input, select { font: inherit; }
+        button, input, select, iframe { outline: none; }
+        .app { height: 100%; display: flex; flex-direction: column; }
+        .topbar { min-height: 76px; display: flex; align-items: center; gap: 18px; padding: 10px 28px; background: rgba(18,20,24,.98); border-bottom: 1px solid rgba(255,255,255,.08); }
+        .icon-button { width: 52px; height: 52px; border: 0; border-radius: 50%; color: var(--text); background: transparent; font-size: 30px; cursor: pointer; }
+        .brand { display: flex; align-items: center; gap: 14px; min-width: 260px; }
+        .brand-icon { width: 50px; height: 50px; border-radius: 15px; display: grid; place-items: center; background: rgba(0,164,220,.16); font-size: 25px; }
+        .brand h1 { margin: 0; font-size: 26px; }
+        .brand p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+        .stats { margin-left: auto; display: flex; gap: 12px; }
+        .pill { padding: 11px 16px; border-radius: 10px; background: rgba(255,255,255,.08); color: var(--muted); white-space: nowrap; }
+        .pill strong { color: var(--text); }
+        .filters { display: grid; grid-template-columns: minmax(300px,1fr) minmax(220px,.3fr) minmax(220px,.3fr) 150px; gap: 14px; padding: 18px 28px 12px; background: var(--bg); }
+        .control { min-height: 54px; border: 1px solid rgba(255,255,255,.09); border-radius: 10px; padding: 0 16px; background: var(--panel); color: var(--text); }
+        .refresh { border: 0; background: var(--accent); font-weight: 700; cursor: pointer; }
+        .status { min-height: 30px; padding: 2px 30px 8px; color: var(--muted); }
+        .catalog { flex: 1; overflow-y: auto; padding: 8px 28px 50px; scroll-behavior: smooth; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+        .card { display: block; min-width: 0; padding: 0; border: 0; border-radius: 12px; overflow: hidden; text-align: left; background: var(--panel); color: var(--text); cursor: pointer; transform: scale(1); transition: transform .13s ease, box-shadow .13s ease, background .13s ease; }
+        .card:focus { transform: scale(1.055); background: var(--panel-2); box-shadow: 0 0 0 4px var(--focus), 0 16px 35px rgba(0,0,0,.55); z-index: 3; }
+        .poster { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; background: #22252a; }
+        .card-body { padding: 12px; }
+        .game-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .meta { min-height: 34px; margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.3; overflow: hidden; }
+        .play-label { display: block; margin-top: 10px; padding: 9px 10px; border-radius: 8px; text-align: center; background: var(--accent); color: #fff; font-weight: 700; }
+        .empty { grid-column: 1/-1; padding: 90px 20px; text-align: center; color: var(--muted); font-size: 20px; }
+        .loading-ring { width: 36px; height: 36px; margin: 0 auto 18px; border: 4px solid rgba(255,255,255,.15); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        :focus-visible { box-shadow: 0 0 0 4px var(--focus); }
+        .game-overlay { position: fixed; inset: 0; z-index: 100; display: none; flex-direction: column; background: #000; }
+        .game-overlay.open { display: flex; }
+        .gamebar { min-height: 68px; display: flex; align-items: center; gap: 14px; padding: 8px 18px; background: #111317; border-bottom: 1px solid rgba(255,255,255,.1); }
+        .gamebar-title { flex: 1; min-width: 0; font-size: 20px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .gamebar button { min-width: 130px; min-height: 48px; border: 0; border-radius: 9px; background: var(--panel-2); color: var(--text); font-weight: 700; }
+        .game-frame { width: 100%; flex: 1; min-height: 0; border: 0; background: #000; }
+        @media (max-width: 1000px) {
+            .topbar { padding-left: 16px; padding-right: 16px; }
+            .brand p { display: none; }
+            .filters { grid-template-columns: 1fr 1fr; padding-left: 16px; padding-right: 16px; }
+            .filters .search { grid-column: 1/-1; }
+            .catalog { padding-left: 16px; padding-right: 16px; }
+            .grid { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 13px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app" id="catalogPage">
+    <header class="topbar">
+        <button id="exitButton" class="icon-button" type="button" aria-label="Voltar">‹</button>
+        <div class="brand">
+            <div class="brand-icon">🎮</div>
+            <div><h1>Games</h1><p>Escolha um game e jogue diretamente no Fire TV.</p></div>
+        </div>
+        <div class="stats">
+            <div class="pill"><strong id="totalCount">0</strong> games</div>
+            <div class="pill"><strong id="visibleCount">0</strong> exibidos</div>
+        </div>
+    </header>
+    <section class="filters">
+        <input id="search" class="control search" type="search" placeholder="Buscar um game..." autocomplete="off">
+        <select id="system" class="control" aria-label="Sistema"><option value="">Todos os sistemas</option></select>
+        <select id="genre" class="control" aria-label="Gênero"><option value="">Todos os gêneros</option></select>
+        <button id="refresh" class="control refresh" type="button">Atualizar</button>
+    </section>
+    <div id="status" class="status">Carregando catálogo...</div>
+    <main id="catalog" class="catalog"><div id="grid" class="grid"><div class="empty"><div class="loading-ring"></div>Carregando games…</div></div></main>
+</div>
+<div id="gameOverlay" class="game-overlay">
+    <div class="gamebar">
+        <button id="closeGame" type="button">← Voltar</button>
+        <div id="gameTitle" class="gamebar-title">Game</div>
+        <button id="reloadGame" type="button">Recarregar</button>
+    </div>
+    <iframe id="gameFrame" class="game-frame" tabindex="0" allow="autoplay; fullscreen; gamepad; clipboard-read; clipboard-write" allowfullscreen></iframe>
+</div>
+<script>
+(function () {
+    'use strict';
+
+    const PAGE_SIZE = 120;
+    const fallback = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#22252a"/><text x="50%" y="48%" font-size="92" text-anchor="middle">🎮</text><text x="50%" y="62%" fill="#b8bec7" font-family="Arial" font-size="34" text-anchor="middle">Akuma Games</text></svg>');
+    const state = { games: [], filtered: [], rendered: 0, selectedId: 0, lastFocus: null, gameUrl: '', searchTimer: 0 };
+    const $ = id => document.getElementById(id);
+
+    function valueOf(object, camel, pascal) {
+        if (!object) return undefined;
+        return object[camel] !== undefined ? object[camel] : object[pascal];
+    }
+
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+    }
+
+    function normalizeGame(item) {
+        return {
+            id: Number(valueOf(item, 'id', 'Id') || 0),
+            title: String(valueOf(item, 'title', 'Title') || 'Sem nome'),
+            imageUrl: String(valueOf(item, 'imageUrl', 'ImageUrl') || ''),
+            system: String(valueOf(item, 'system', 'System') || 'Outros'),
+            genre: String(valueOf(item, 'genre', 'Genre') || ''),
+            players: String(valueOf(item, 'players', 'Players') || '')
+        };
+    }
+
+    function setStatus(text) { $('status').textContent = text || ''; }
+
+    function setOptions(select, values, label) {
+        const selected = select.value;
+        const unique = Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        select.innerHTML = '<option value="">' + escapeHtml(label) + '</option>' + unique.map(item => '<option value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</option>').join('');
+        if (unique.includes(selected)) select.value = selected;
+    }
+
+    function prepareFilters() {
+        setOptions($('system'), state.games.map(game => game.system), 'Todos os sistemas');
+        const genres = state.games.flatMap(game => game.genre ? game.genre.split(' / ').map(item => item.trim()) : []);
+        setOptions($('genre'), genres, 'Todos os gêneros');
+    }
+
+    function applyFilters() {
+        const query = $('search').value.trim().toLocaleLowerCase('pt-BR');
+        const system = $('system').value;
+        const genre = $('genre').value;
+        state.filtered = state.games.filter(game => {
+            const searchable = (game.title + ' ' + game.system + ' ' + game.genre).toLocaleLowerCase('pt-BR');
+            return (!query || searchable.includes(query))
+                && (!system || game.system === system)
+                && (!genre || game.genre === genre || game.genre.split(' / ').includes(genre));
+        });
+        state.rendered = 0;
+        $('grid').innerHTML = '';
+        renderMore();
+        $('catalog').scrollTop = 0;
+    }
+
+    function renderMore() {
+        const next = state.filtered.slice(state.rendered, state.rendered + PAGE_SIZE);
+        if (!next.length && state.rendered === 0) {
+            $('grid').innerHTML = '<div class="empty">Nenhum game encontrado.</div>';
+        } else if (next.length) {
+            $('grid').insertAdjacentHTML('beforeend', next.map((game, index) => {
+                const eager = state.rendered + index < 20 ? 'eager' : 'lazy';
+                const meta = [game.system, game.genre].filter(Boolean).join(' · ');
+                return '<button class="card" type="button" data-game-id="' + game.id + '" aria-label="Jogar ' + escapeHtml(game.title) + '">'
+                    + '<img class="poster" loading="' + eager + '" decoding="async" src="' + escapeHtml(game.imageUrl || fallback) + '" alt="" onerror="this.onerror=null;this.src=\'' + fallback + '\'">'
+                    + '<span class="card-body"><span class="game-title">' + escapeHtml(game.title) + '</span><span class="meta">' + escapeHtml(meta || 'Game') + '</span><span class="play-label">Jogar</span></span>'
+                    + '</button>';
+            }).join(''));
+        }
+        state.rendered += next.length;
+        $('totalCount').textContent = state.games.length.toLocaleString('pt-BR');
+        $('visibleCount').textContent = state.filtered.length.toLocaleString('pt-BR');
+    }
+
+    function requestCatalog(refresh) {
+        setStatus(refresh ? 'Atualizando catálogo...' : 'Carregando catálogo...');
+        if (window.AkumaGamesAndroid) window.AkumaGamesAndroid.requestCatalog(Boolean(refresh));
+        else receiveError('Ponte Android não disponível.');
+    }
+
+    function launchGame(id, source) {
+        if (!id) return;
+        state.selectedId = id;
+        state.lastFocus = source || document.activeElement;
+        setStatus('Preparando o game...');
+        window.AkumaGamesAndroid.requestLaunch(Number(id));
+    }
+
+    function receiveCatalog(raw) {
+        try {
+            const response = JSON.parse(raw);
+            const items = valueOf(response, 'items', 'Items') || [];
+            state.games = items.map(normalizeGame).filter(game => game.id > 0);
+            prepareFilters();
+            applyFilters();
+            setStatus('Catálogo pronto.');
+            setTimeout(() => ($('search').focus()), 80);
+        } catch (error) {
+            receiveError('Resposta inválida do catálogo: ' + error.message);
+        }
+    }
+
+    function receiveLaunch(raw) {
+        try {
+            const response = JSON.parse(raw);
+            state.gameUrl = String(valueOf(response, 'playerUrl', 'PlayerUrl') || '');
+            const title = String(valueOf(response, 'title', 'Title') || 'Game');
+            if (!state.gameUrl) throw new Error('URL do game vazia');
+            $('gameTitle').textContent = title;
+            $('gameFrame').src = state.gameUrl;
+            $('gameOverlay').classList.add('open');
+            window.AkumaGamesAndroid.setGameOpen(true);
+            setStatus('');
+            setTimeout(() => $('gameFrame').focus(), 350);
+        } catch (error) {
+            receiveError('Não foi possível abrir o game: ' + error.message);
+        }
+    }
+
+    function receiveError(message) {
+        setStatus(message || 'Ocorreu um erro ao carregar o catálogo.');
+        if (!state.games.length) $('grid').innerHTML = '<div class="empty">' + escapeHtml(message || 'Falha ao carregar games.') + '</div>';
+    }
+
+    function closeGame() {
+        $('gameOverlay').classList.remove('open');
+        $('gameFrame').src = 'about:blank';
+        window.AkumaGamesAndroid.setGameOpen(false);
+        const focus = state.lastFocus;
+        state.gameUrl = '';
+        setTimeout(() => { if (focus && document.contains(focus)) focus.focus(); else $('search').focus(); }, 80);
+    }
+
+    function visibleCards() { return Array.from(document.querySelectorAll('.card')); }
+
+    function columnCount() {
+        const cards = visibleCards();
+        if (cards.length < 2) return 1;
+        const firstTop = cards[0].offsetTop;
+        let columns = 0;
+        for (const card of cards) {
+            if (Math.abs(card.offsetTop - firstTop) > 4) break;
+            columns++;
+        }
+        return Math.max(1, columns);
+    }
+
+    function focusCard(index) {
+        const cards = visibleCards();
+        if (!cards.length) return;
+        const target = cards[Math.max(0, Math.min(cards.length - 1, index))];
+        target.focus();
+        target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        if (index >= cards.length - 10 && state.rendered < state.filtered.length) renderMore();
+    }
+
+    $('grid').addEventListener('click', event => {
+        const card = event.target.closest('.card');
+        if (card) launchGame(Number(card.dataset.gameId), card);
+    });
+    $('search').addEventListener('input', () => { clearTimeout(state.searchTimer); state.searchTimer = setTimeout(applyFilters, 130); });
+    $('system').addEventListener('change', applyFilters);
+    $('genre').addEventListener('change', applyFilters);
+    $('refresh').addEventListener('click', () => requestCatalog(true));
+    $('exitButton').addEventListener('click', () => window.AkumaGamesAndroid.exit());
+    $('closeGame').addEventListener('click', closeGame);
+    $('reloadGame').addEventListener('click', () => { if (state.gameUrl) $('gameFrame').src = state.gameUrl; });
+    $('catalog').addEventListener('scroll', () => {
+        const catalog = $('catalog');
+        if (catalog.scrollTop + catalog.clientHeight >= catalog.scrollHeight - 900 && state.rendered < state.filtered.length) renderMore();
+    }, { passive: true });
+
+    document.addEventListener('keydown', event => {
+        if ($('gameOverlay').classList.contains('open')) {
+            if (event.key === 'Escape' || event.key === 'Backspace') { event.preventDefault(); closeGame(); }
+            return;
+        }
+
+        const active = document.activeElement;
+        const card = active && active.classList && active.classList.contains('card') ? active : null;
+        if (card && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
+            event.preventDefault();
+            const cards = visibleCards();
+            const index = cards.indexOf(card);
+            const columns = columnCount();
+            if (event.key === 'ArrowLeft') focusCard(index - 1);
+            if (event.key === 'ArrowRight') focusCard(index + 1);
+            if (event.key === 'ArrowDown') focusCard(index + columns);
+            if (event.key === 'ArrowUp') {
+                if (index < columns) $('search').focus(); else focusCard(index - columns);
+            }
+            return;
+        }
+
+        if (['search','system','genre','refresh'].includes(active && active.id) && event.key === 'ArrowDown') {
+            event.preventDefault();
+            focusCard(0);
+        }
+        if ((event.key === 'Escape' || event.key === 'Backspace') && window.AkumaGamesAndroid) {
+            event.preventDefault();
+            window.AkumaGamesAndroid.exit();
+        }
+    }, true);
+
+    window.AkumaTv = { receiveCatalog, receiveLaunch, receiveError, closeGame };
+    document.addEventListener('DOMContentLoaded', () => requestCatalog(false));
+}());
+</script>
+</body>
+</html>
