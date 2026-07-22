@@ -1,15 +1,17 @@
-/* Akuma Games Card Click Bridge v0.2.3.2
- * Faz o clique na capa usar a mesma rota do título do game.
- * O bridge principal detecta a página de detalhes e abre o PlayerUrl HTML5.
+/* Akuma Games Card Click Bridge v0.2.3.5
+ * Faz o clique na capa de um GAME usar a mesma rota do título.
+ * Bibliotecas e categorias continuam com a navegação nativa instantânea do Jellyfin.
  */
 (function () {
     'use strict';
 
-    const VERSION = '0.2.3.2';
+    const VERSION = '0.2.3.5';
     if (window.__akumaGamesCardClickLoaded === VERSION) return;
     window.__akumaGamesCardClickLoaded = VERSION;
 
     const pendingItems = new Set();
+    const confirmedGames = new Set();
+    const confirmedNonGames = new Set();
     let bypassNextClick = false;
 
     function waitForApiClient(timeoutMs) {
@@ -143,7 +145,8 @@
             '.cardText a[href]',
             'a[href*="#/details?"]',
             'a[href*="/details?"]',
-            'a[href*="id="]'
+            'a[href*="id="]',
+            'a[href*="parentId="]'
         ].join(','));
 
         return preferred ? preferred.href : '';
@@ -156,12 +159,70 @@
             '.cardText-first a[href]',
             '.cardText a[href]',
             '.cardText-secondary a[href]',
-            'a.itemAction[href*="id="]',
+            'a.itemAction[href]',
             'a[href*="#/details?"]',
-            'a[href*="/details?"]'
+            'a[href*="/details?"]',
+            'a[href*="parentId="]'
         ].join(','));
 
         return titleLink ? titleLink.href : '';
+    }
+
+    function isDetailsRoute(href) {
+        if (!href) return false;
+        const text = String(href).toLowerCase();
+        return text.includes('/details?') || text.includes('#/details?');
+    }
+
+    function isContainerRoute(href) {
+        if (!href) return false;
+        const text = String(href).toLowerCase();
+
+        return text.includes('parentid=')
+            || text.includes('#/list?')
+            || text.includes('/list?')
+            || text.includes('#/home')
+            || text.includes('collectiontype=')
+            || text.includes('#/movies')
+            || text.includes('#/tv')
+            || text.includes('#/livetv')
+            || text.includes('#/collections');
+    }
+
+    function readCardType(card) {
+        if (!(card instanceof Element)) return '';
+
+        const elements = [
+            card,
+            card.querySelector('[data-type]'),
+            card.querySelector('[data-itemtype]'),
+            card.querySelector('[data-item-type]')
+        ];
+
+        for (const element of elements) {
+            if (!(element instanceof Element)) continue;
+            const value = element.getAttribute('data-type')
+                || element.getAttribute('data-itemtype')
+                || element.getAttribute('data-item-type');
+            if (value) return String(value).toLowerCase();
+        }
+
+        return '';
+    }
+
+    function isFolderCard(card, originalHref, titleHref) {
+        if (isContainerRoute(originalHref) || isContainerRoute(titleHref)) return true;
+
+        // Se o título possui uma rota conhecida e ela não é /details, trata como
+        // biblioteca/categoria e deixa o Jellyfin navegar sem consultar o plugin.
+        if (titleHref && !isDetailsRoute(titleHref)) return true;
+
+        const type = readCardType(card);
+        return type.includes('folder')
+            || type === 'userview'
+            || type === 'aggregatefolder'
+            || type === 'collectionfolder'
+            || type === 'boxset';
     }
 
     function currentServerId(client) {
@@ -225,16 +286,29 @@
         const card = findCard(event.target);
         if (!card) return;
 
+        const originalHref = findOriginalHref(event.target, card);
+        const titleHref = findTitleHref(card);
+
+        // Esta é a otimização principal: biblioteca Games e pastas Arcade, NES,
+        // PlayStation etc. seguem a rota nativa imediatamente, sem aguardar uma
+        // chamada ResolveItem que inevitavelmente retornaria 404.
+        if (isFolderCard(card, originalHref, titleHref)) return;
+
         const itemId = findItemId(event.target, card);
         if (!itemId || pendingItems.has(itemId)) return;
 
-        const originalHref = findOriginalHref(event.target, card);
-        const titleHref = findTitleHref(card);
+        if (confirmedNonGames.has(itemId)) return;
 
         event.preventDefault();
         event.stopPropagation();
         if (typeof event.stopImmediatePropagation === 'function') {
             event.stopImmediatePropagation();
+        }
+
+        if (confirmedGames.has(itemId)) {
+            const client = window.ApiClient;
+            navigateToDetails(itemId, titleHref, client);
+            return;
         }
 
         pendingItems.add(itemId);
@@ -247,8 +321,10 @@
                 dataType: 'json'
             });
 
+            confirmedGames.add(itemId);
             navigateToDetails(itemId, titleHref, client);
         } catch (error) {
+            confirmedNonGames.add(itemId);
             // Não é um game Akuma: devolve o comportamento original do Jellyfin.
             restoreOriginalAction(originalHref);
         } finally {
@@ -263,7 +339,9 @@
     window.AkumaGamesCardClickBridge = {
         version: VERSION,
         loaded: true,
-        pending: function () { return Array.from(pendingItems); }
+        pending: function () { return Array.from(pendingItems); },
+        gamesCached: function () { return confirmedGames.size; },
+        nonGamesCached: function () { return confirmedNonGames.size; }
     };
 
     console.info('Akuma Games Card Click Bridge v' + VERSION + ' carregado.');
